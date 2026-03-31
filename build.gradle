@@ -1,0 +1,84 @@
+plugins {
+    id 'scala'
+    id 'application'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group = 'com.cwfgw'
+version = '0.1.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+def scala3Version = '3.3.4'
+def http4sVersion = '0.23.30'
+def circeVersion = '0.14.10'
+def doobieVersion = '1.0.0-RC6'
+def flywayVersion = '10.21.0'
+
+dependencies {
+    // Scala
+    implementation "org.scala-lang:scala3-library_3:${scala3Version}"
+
+    // Cats Effect
+    implementation 'org.typelevel:cats-effect_3:3.5.7'
+
+    // http4s
+    implementation "org.http4s:http4s-ember-server_3:${http4sVersion}"
+    implementation "org.http4s:http4s-ember-client_3:${http4sVersion}"
+    implementation "org.http4s:http4s-circe_3:${http4sVersion}"
+    implementation "org.http4s:http4s-dsl_3:${http4sVersion}"
+
+    // Circe JSON
+    implementation "io.circe:circe-core_3:${circeVersion}"
+    implementation "io.circe:circe-generic_3:${circeVersion}"
+    implementation "io.circe:circe-parser_3:${circeVersion}"
+
+    // Doobie (database)
+    implementation "org.tpolecat:doobie-core_3:${doobieVersion}"
+    implementation "org.tpolecat:doobie-hikari_3:${doobieVersion}"
+    implementation "org.tpolecat:doobie-postgres_3:${doobieVersion}"
+    implementation "org.tpolecat:doobie-postgres-circe_3:${doobieVersion}"
+
+    // Flyway (migrations)
+    implementation "org.flywaydb:flyway-core:${flywayVersion}"
+    implementation "org.flywaydb:flyway-database-postgresql:${flywayVersion}"
+
+    // Config
+    implementation 'com.github.pureconfig:pureconfig-core_3:0.17.8'
+
+    // Logging
+    implementation 'org.typelevel:log4cats-slf4j_3:2.7.0'
+    implementation 'ch.qos.logback:logback-classic:1.5.12'
+
+    // Test
+    testImplementation 'org.scalameta:munit_3:1.0.3'
+    testImplementation 'org.typelevel:munit-cats-effect_3:2.0.0'
+}
+
+application {
+    mainClass = 'com.cwfgw.Main'
+}
+
+shadowJar {
+    archiveBaseName = 'cwfgw'
+    archiveClassifier = 'all'
+    mergeServiceFiles()
+}
+
+tasks.withType(ScalaCompile).configureEach {
+    scalaCompileOptions.additionalParameters = [
+        '-feature',
+    ]
+}
+
+test {
+    useJUnitPlatform()
+}

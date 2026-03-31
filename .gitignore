@@ -1,0 +1,25 @@
+# Gradle
+.gradle/
+build/
+gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.bsp/
+.metals/
+.scala-build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime
+*.log
+*.pid
+
+# Environment
+.env

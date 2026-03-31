@@ -1,0 +1,1 @@
+ALTER TABLE tournaments ADD COLUMN is_major BOOLEAN NOT NULL DEFAULT false;

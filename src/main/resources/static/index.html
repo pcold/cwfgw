@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Castlewood Fantasy Golf</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+  </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen" x-data="app()" x-cloak>
+
+  <!-- Nav -->
+  <nav class="bg-gray-800 border-b border-gray-700">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <h1 class="text-lg font-bold text-green-400 tracking-wide">CWFG</h1>
+      <div class="flex gap-1">
+        <button @click="page = 'scoreboard'" :class="page === 'scoreboard' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
+                class="px-3 py-1.5 rounded text-sm font-medium transition">Scoreboard</button>
+        <button @click="page = 'standings'; loadReport()" :class="page === 'standings' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
+                class="px-3 py-1.5 rounded text-sm font-medium transition">Weekly Report</button>
+        <button @click="page = 'rosters'" :class="page === 'rosters' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
+                class="px-3 py-1.5 rounded text-sm font-medium transition">Rosters</button>
+        <button @click="page = 'sidebets'" :class="page === 'sidebets' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
+                class="px-3 py-1.5 rounded text-sm font-medium transition">Side Bets</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-6xl mx-auto px-4 py-6">
+
+    <!-- Tournament selector (shared across views) -->
+    <div class="mb-6 flex items-center gap-4" x-show="page === 'scoreboard'">
+      <select x-model="selectedTournament" @change="loadScoreboard()"
+              class="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm">
+        <template x-for="t in tournaments" :key="t.id">
+          <option :value="t.id" x-text="t.name + (t.is_major ? ' (Major)' : '') + ' — ' + t.status"></option>
+        </template>
+      </select>
+      <span class="text-xs text-gray-500" x-show="scoreboardLoading">Loading...</span>
+    </div>
+
+    <!-- SCOREBOARD PAGE -->
+    <div x-show="page === 'scoreboard'">
+      <!-- Live preview banner -->
+      <div x-show="scoreboardData && !scoreboardData.completed" class="mb-4 px-4 py-2 bg-yellow-900/40 border border-yellow-700 rounded text-yellow-300 text-sm">
+        Tournament in progress — scores are live estimates
+      </div>
+
+      <!-- Team scores -->
+      <div class="bg-gray-800 rounded-lg overflow-hidden" x-show="scoreboardData">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-700 text-gray-300 text-xs uppercase tracking-wider">
+            <tr>
+              <th class="px-4 py-3 text-left">#</th>
+              <th class="px-4 py-3 text-left">Team</th>
+              <th class="px-4 py-3 text-right">Top 10 Earnings</th>
+              <th class="px-4 py-3 text-right">Weekly +/-</th>
+              <th class="px-4 py-3 text-left">Golfers in Top 10</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="(team, i) in scoreboardTeams" :key="team.team_id">
+              <tr class="border-t border-gray-700 hover:bg-gray-750"
+                  :class="team.weekly_total > 0 ? 'bg-green-900/10' : team.weekly_total < 0 ? 'bg-red-900/10' : ''">
+                <td class="px-4 py-3 text-gray-400" x-text="i + 1"></td>
+                <td class="px-4 py-3 font-medium" x-text="team.team_name"></td>
+                <td class="px-4 py-3 text-right font-mono" x-text="'$' + Number(team.top_ten_earnings).toFixed(2)"></td>
+                <td class="px-4 py-3 text-right font-mono font-bold"
+                    :class="team.weekly_total > 0 ? 'text-green-400' : team.weekly_total < 0 ? 'text-red-400' : 'text-gray-400'"
+                    x-text="(team.weekly_total >= 0 ? '+' : '') + '$' + Number(team.weekly_total).toFixed(2)"></td>
+                <td class="px-4 py-3">
+                  <template x-for="gs in team.golfer_scores" :key="gs.golfer_id">
+                    <span class="inline-block mr-2 text-xs">
+                      <span class="text-gray-300" x-text="gs.golfer_name"></span>
+                      <span class="text-gray-500">T</span><span class="text-gray-400" x-text="gs.position"></span>
+                      <span class="text-green-400 font-mono" x-text="'$' + Number(gs.payout).toFixed(2)"></span>
+                      <span x-show="gs.ownership_pct < 100" class="text-gray-500 text-xs" x-text="'(' + gs.ownership_pct + '%)'"></span>
+                    </span>
+                  </template>
+                  <span x-show="!team.golfer_scores || team.golfer_scores.length === 0" class="text-gray-600">—</span>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Leaderboard -->
+      <div class="mt-6" x-show="scoreboardData && scoreboardData.leaderboard">
+        <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Leaderboard (Top 20)</h3>
+        <div class="bg-gray-800 rounded-lg overflow-hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-700 text-gray-300 text-xs uppercase tracking-wider">
+              <tr>
+                <th class="px-4 py-2 text-left">Pos</th>
+                <th class="px-4 py-2 text-left">Player</th>
+                <th class="px-4 py-2 text-right">Score</th>
+                <th class="px-4 py-2 text-left">Team</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="e in scoreboardData.leaderboard" :key="e.name">
+                <tr class="border-t border-gray-700" :class="e.rostered ? 'bg-green-900/10' : ''">
+                  <td class="px-4 py-2 text-gray-400" x-text="e.position"></td>
+                  <td class="px-4 py-2" x-text="e.name"></td>
+                  <td class="px-4 py-2 text-right font-mono" x-text="e.score_to_par === 0 ? 'E' : (e.score_to_par > 0 ? '+' : '') + e.score_to_par"></td>
+                  <td class="px-4 py-2 text-xs" :class="e.team_name ? 'text-green-400' : 'text-gray-600'"
+                      x-text="e.team_name || 'undrafted'"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- No data state -->
+      <div x-show="!scoreboardData && !scoreboardLoading" class="text-center text-gray-500 py-12">
+        Select a tournament to view scores
+      </div>
+    </div>
+
+    <!-- STANDINGS / WEEKLY REPORT PAGE -->
+    <div x-show="page === 'standings'">
+      <!-- Header: tournament selector + standings rank -->
+      <div class="mb-4 flex items-center gap-4 flex-wrap">
+        <select x-model="reportTournament" @change="loadReport()"
+                class="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm">
+          <template x-for="t in tournaments" :key="t.id">
+            <option :value="t.id" x-text="t.name + (t.is_major ? ' **' : '') + ' — ' + t.status"></option>
+          </template>
+        </select>
+        <label class="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <input type="checkbox" x-model="reportLive" @change="loadReport()"
+                 class="rounded bg-gray-700 border-gray-600 text-green-500 focus:ring-green-500">
+          <span :class="reportLive ? 'text-yellow-300' : 'text-gray-400'">Live</span>
+        </label>
+        <span class="text-xs text-gray-500" x-show="reportLoading">Loading...</span>
+        <span x-show="report?.live" class="text-xs bg-yellow-700/50 text-yellow-300 px-2 py-0.5 rounded">LIVE — projected standings</span>
+      </div>
+
+      <!-- Report header bar (like PDF green bar) -->
+      <div class="bg-green-700 text-white px-4 py-2 rounded-t flex justify-between items-center text-xs font-bold" x-show="report">
+        <div>
+          <span x-text="'Week ' + (report?.tournament?.week || '?')"></span>
+          <span class="mx-2">|</span>
+          <span x-text="report?.tournament?.name"></span>
+          <span x-show="report?.tournament?.is_major" class="ml-1 text-yellow-300">**MAJOR**</span>
+        </div>
+        <div class="flex gap-4">
+          <template x-for="(s, i) in report?.standings_order?.slice(0, 5) || []" :key="s.team_name">
+            <span><span class="text-green-200" x-text="(i+1) + ')'"></span> <span x-text="s.team_name"></span></span>
+          </template>
+        </div>
+      </div>
+
+      <!-- The grid -->
+      <div class="overflow-x-auto" x-show="report && report.teams">
+        <table class="w-full text-xs border-collapse">
+          <!-- Team header row -->
+          <thead>
+            <tr class="bg-yellow-600 text-black font-bold">
+              <th class="border border-gray-600 px-1 py-1.5 w-12 text-center">TEAM #</th>
+              <template x-for="(team, i) in report.teams" :key="team.team_id">
+                <th class="border border-gray-600 px-1 py-1.5 text-center min-w-[90px]">
+                  <div x-text="(i+1)"></div>
+                  <div x-text="team.team_name" class="text-xs"></div>
+                </th>
+              </template>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Draft round rows 1-8 -->
+            <template x-for="round in [1,2,3,4,5,6,7,8]" :key="round">
+              <tr class="bg-gray-800 hover:bg-gray-750">
+                <td class="border border-gray-700 px-1 py-1 text-center font-bold text-gray-400" x-text="round"></td>
+                <template x-for="team in report.teams" :key="team.team_id + '-' + round">
+                  <td class="border border-gray-700 px-1.5 py-1 text-center align-top">
+                    <template x-if="team.rows[round-1]?.golfer_name">
+                      <div>
+                        <div class="font-semibold text-gray-200 truncate" x-text="team.rows[round-1].golfer_name"></div>
+                        <div x-show="team.rows[round-1].position_str" class="text-gray-400">
+                          <span x-text="team.rows[round-1].position_str"></span>
+                          <span x-show="team.rows[round-1].score_to_par" class="ml-0.5" x-text="team.rows[round-1].score_to_par"></span>
+                        </div>
+                        <div x-show="team.rows[round-1].earnings > 0" class="text-green-400 font-mono font-bold"
+                             x-text="'$' + Number(team.rows[round-1].earnings).toFixed(2)">
+                        </div>
+                        <div x-show="team.rows[round-1].ownership_pct < 100" class="text-gray-500"
+                             x-text="team.rows[round-1].ownership_pct + '%'"></div>
+                      </div>
+                    </template>
+                    <template x-if="!team.rows[round-1]?.golfer_name">
+                      <span class="text-gray-600">—</span>
+                    </template>
+                  </td>
+                </template>
+              </tr>
+            </template>
+
+            <!-- Spacer -->
+            <tr><td :colspan="report.teams.length + 1" class="h-1 bg-gray-900"></td></tr>
+
+            <!-- TOP TENS row -->
+            <tr class="bg-gray-700 font-bold">
+              <td class="border border-gray-600 px-1 py-1.5 text-center text-xs">TOP TENS</td>
+              <template x-for="team in report.teams" :key="'tt-' + team.team_id">
+                <td class="border border-gray-600 px-1 py-1.5 text-center font-mono"
+                    :class="team.top_tens > 0 ? 'text-green-400' : 'text-gray-500'"
+                    x-text="'$' + Number(team.top_tens).toFixed(0)"></td>
+              </template>
+            </tr>
+
+            <!-- **WEEKLY TOTAL row -->
+            <tr class="bg-gray-700 font-bold">
+              <td class="border border-gray-600 px-1 py-1.5 text-center text-xs">**WEEKLY</td>
+              <template x-for="team in report.teams" :key="'wt-' + team.team_id">
+                <td class="border border-gray-600 px-1 py-1.5 text-center font-mono"
+                    :class="team.weekly_total > 0 ? 'text-green-400' : team.weekly_total < 0 ? 'text-red-400' : 'text-gray-500'"
+                    x-text="fmtMoney(team.weekly_total)"></td>
+              </template>
+            </tr>
+
+            <!-- PREVIOUS row -->
+            <tr class="bg-gray-800">
+              <td class="border border-gray-700 px-1 py-1.5 text-center text-xs text-gray-400">PREVIOUS</td>
+              <template x-for="team in report.teams" :key="'prev-' + team.team_id">
+                <td class="border border-gray-700 px-1 py-1.5 text-center font-mono text-gray-400 text-xs italic"
+                    x-text="fmtMoney(team.previous)"></td>
+              </template>
+            </tr>
+
+            <!-- SUBTOTAL row -->
+            <tr class="bg-gray-700 font-bold">
+              <td class="border border-gray-600 px-1 py-1.5 text-center text-xs">SUBTOTAL</td>
+              <template x-for="team in report.teams" :key="'sub-' + team.team_id">
+                <td class="border border-gray-600 px-1 py-1.5 text-center font-mono"
+                    :class="team.subtotal > 0 ? 'text-green-400' : team.subtotal < 0 ? 'text-red-400' : 'text-gray-500'">
+                  <div x-text="fmtMoney(team.subtotal)"></div>
+                  <div class="text-gray-500 text-xs font-normal" x-text="'(' + team.top_ten_count + ')'"></div>
+                </td>
+              </template>
+            </tr>
+
+            <!-- ROWS 5-6-7-8 (Side bets) -->
+            <tr class="bg-gray-800">
+              <td class="border border-gray-700 px-1 py-1.5 text-center text-xs text-gray-400">ROWS 5-6-7-8</td>
+              <template x-for="team in report.teams" :key="'sb-' + team.team_id">
+                <td class="border border-gray-700 px-1 py-1.5 text-center font-mono text-gray-400"
+                    x-text="fmtMoney(team.side_bets)"></td>
+              </template>
+            </tr>
+
+            <!-- Spacer -->
+            <tr><td :colspan="report.teams.length + 1" class="h-1 bg-gray-900"></td></tr>
+
+            <!-- TOTAL CASH row -->
+            <tr class="bg-yellow-700/30 font-bold text-sm">
+              <td class="border border-yellow-600/50 px-1 py-2 text-center text-xs">TOTAL<br>CASH</td>
+              <template x-for="team in report.teams" :key="'total-' + team.team_id">
+                <td class="border border-yellow-600/50 px-1 py-2 text-center font-mono"
+                    :class="team.total_cash > 0 ? 'text-green-400' : team.total_cash < 0 ? 'text-red-400' : 'text-gray-400'"
+                    x-text="fmtMoney(team.total_cash)"></td>
+              </template>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Undrafted top tens -->
+      <div class="mt-3 text-xs text-gray-500" x-show="report?.undrafted_top_tens?.length > 0">
+        <span class="font-semibold">UNDRAFTED TOP TENS:</span>
+        <template x-for="u in report.undrafted_top_tens" :key="u.name">
+          <span class="ml-2" x-text="u.name + ' $' + Number(u.payout).toFixed(0)"></span>
+        </template>
+      </div>
+
+      <!-- No data state -->
+      <div x-show="!report && !reportLoading" class="text-center text-gray-500 py-12">
+        Select a tournament to view the weekly report
+      </div>
+    </div>
+
+    <!-- ROSTERS PAGE (placeholder) -->
+    <div x-show="page === 'rosters'">
+      <h2 class="text-xl font-bold mb-4">Team Rosters</h2>
+      <p class="text-gray-500">Coming soon</p>
+    </div>
+
+    <!-- SIDE BETS PAGE (placeholder) -->
+    <div x-show="page === 'sidebets'">
+      <h2 class="text-xl font-bold mb-4">Round 5-8 Side Bets</h2>
+      <p class="text-gray-500">Coming soon</p>
+    </div>
+
+  </main>
+
+  <script>
+    const LEAGUE_ID = '11111111-1111-1111-1111-111111111111';
+
+    function fmtMoney(val) {
+      const n = Number(val);
+      if (n === 0) return '$0';
+      const sign = n < 0 ? '-' : '';
+      return sign + '$' + Math.abs(n).toFixed(2);
+    }
+
+    function app() {
+      return {
+        page: 'standings',
+        tournaments: [],
+        selectedTournament: null,
+        scoreboardData: null,
+        scoreboardTeams: [],
+        scoreboardLoading: false,
+        report: null,
+        reportTournament: null,
+        reportLive: false,
+        reportLoading: false,
+
+        fmtMoney,
+
+        async init() {
+          await this.loadTournaments();
+
+          // Auto-select the most recent completed or in-progress tournament
+          const current = this.tournaments.find(t => t.status === 'in_progress')
+            || this.tournaments.find(t => t.status === 'completed')
+            || this.tournaments[0];
+          if (current) {
+            this.selectedTournament = current.id;
+            this.reportTournament = current.id;
+            this.loadScoreboard();
+            this.loadReport();
+          }
+        },
+
+        async loadTournaments() {
+          const resp = await fetch(`/api/v1/tournaments?season=2026`);
+          const data = await resp.json();
+          this.tournaments = data.sort((a, b) => b.start_date.localeCompare(a.start_date));
+        },
+
+        async loadScoreboard() {
+          if (!this.selectedTournament) return;
+          this.scoreboardLoading = true;
+          this.scoreboardData = null;
+          this.scoreboardTeams = [];
+
+          const tournament = this.tournaments.find(t => t.id === this.selectedTournament);
+          if (!tournament) { this.scoreboardLoading = false; return; }
+
+          if (tournament.status === 'completed') {
+            const resp = await fetch(`/api/v1/leagues/${LEAGUE_ID}/scoring/calculate/${this.selectedTournament}`, { method: 'POST' });
+            if (resp.ok) {
+              const data = await resp.json();
+              this.scoreboardData = { completed: true, teams: data.teams || [] };
+              this.scoreboardTeams = (data.teams || []).sort((a, b) => b.weekly_total - a.weekly_total);
+            }
+          } else {
+            const resp = await fetch(`/api/v1/espn/preview/${LEAGUE_ID}?date=${tournament.start_date}`);
+            if (resp.ok) {
+              const data = await resp.json();
+              const event = data.find(e => e.espn_id === tournament.pga_tournament_id) || data[0];
+              if (event) {
+                this.scoreboardData = event;
+                this.scoreboardTeams = (event.teams || []).sort((a, b) => b.weekly_total - a.weekly_total);
+              }
+            }
+          }
+          this.scoreboardLoading = false;
+        },
+
+        async loadReport() {
+          if (!this.reportTournament) return;
+          this.reportLoading = true;
+          this.report = null;
+
+          const liveParam = this.reportLive ? '?live=true' : '';
+          const resp = await fetch(`/api/v1/leagues/${LEAGUE_ID}/report/${this.reportTournament}${liveParam}`);
+          if (resp.ok) {
+            this.report = await resp.json();
+          }
+          this.reportLoading = false;
+        }
+      };
+    }
+  </script>
+
+</body>
+</html>
