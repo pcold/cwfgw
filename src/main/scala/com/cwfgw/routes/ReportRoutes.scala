@@ -18,3 +18,13 @@ object ReportRoutes:
       service.getReport(leagueId, tournamentId, live.getOrElse(false))
         .flatMap(Ok(_))
         .handleErrorWith(e => BadRequest(Json.obj("error" -> e.getMessage.asJson)))
+
+    case GET -> Root / "api" / "v1" / "leagues" / UUIDVar(leagueId) / "rankings" :? LiveParam(live) =>
+      service.getRankings(leagueId, live.getOrElse(false))
+        .flatMap(Ok(_))
+        .handleErrorWith(e => BadRequest(Json.obj("error" -> e.getMessage.asJson)))
+
+    case GET -> Root / "api" / "v1" / "leagues" / UUIDVar(leagueId) / "golfer" / UUIDVar(golferId) / "history" =>
+      service.getGolferHistory(leagueId, golferId)
+        .flatMap(Ok(_))
+        .handleErrorWith(e => BadRequest(Json.obj("error" -> e.getMessage.asJson)))

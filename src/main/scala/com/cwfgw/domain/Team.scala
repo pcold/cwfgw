@@ -9,13 +9,15 @@ case class Team(
     leagueId: UUID,
     ownerName: String,
     teamName: String,
+    teamNumber: Option[Int],
     createdAt: Instant,
     updatedAt: Instant
 ) derives ConfiguredCodec
 
 case class CreateTeam(
     ownerName: String,
-    teamName: String
+    teamName: String,
+    teamNumber: Option[Int] = None
 ) derives ConfiguredCodec
 
 case class UpdateTeam(

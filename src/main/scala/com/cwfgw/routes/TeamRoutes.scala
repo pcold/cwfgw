@@ -9,11 +9,29 @@ import io.circe.syntax.*
 import io.circe.Json
 import java.util.UUID
 import com.cwfgw.domain.*
-import com.cwfgw.service.TeamService
+import com.cwfgw.service.{TeamService, RosterViewTeam}
 
 object TeamRoutes:
 
   def routes(service: TeamService): HttpRoutes[IO] = HttpRoutes.of[IO]:
+    // Full roster view with golfer names: GET /api/v1/leagues/:id/rosters
+    case GET -> Root / "api" / "v1" / "leagues" / UUIDVar(leagueId) / "rosters" =>
+      service.getRosterView(leagueId).flatMap: teams =>
+        Ok(Json.arr(teams.map: t =>
+          Json.obj(
+            "team_id" -> t.teamId.asJson,
+            "team_name" -> t.teamName.asJson,
+            "picks" -> t.picks.map: p =>
+              Json.obj(
+                "round" -> p.round.asJson,
+                "golfer_name" -> p.golferName.asJson,
+                "golfer_id" -> p.golferId.asJson,
+                "ownership_pct" -> p.ownershipPct.asJson
+              )
+            .asJson
+          )
+        *))
+
     case GET -> Root / "api" / "v1" / "leagues" / UUIDVar(leagueId) / "teams" =>
       service.listByLeague(leagueId).flatMap(Ok(_))
 

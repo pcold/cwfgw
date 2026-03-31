@@ -26,6 +26,15 @@ object ScoreRepository:
           RETURNING id, league_id, team_id, tournament_id, golfer_id, points, breakdown, calculated_at"""
       .query[FantasyScore].unique
 
+  def getGolferSeasonScores(leagueId: UUID, golferId: UUID): ConnectionIO[List[(String, Int, BigDecimal, BigDecimal)]] =
+    sql"""SELECT t.name, COALESCE((fs.breakdown->>'position')::int, 0), fs.points,
+                 COALESCE((fs.breakdown->>'base_payout')::numeric, 0)
+          FROM fantasy_scores fs
+          JOIN tournaments t ON fs.tournament_id = t.id
+          WHERE fs.league_id = $leagueId AND fs.golfer_id = $golferId
+          ORDER BY t.start_date ASC"""
+      .query[(String, Int, BigDecimal, BigDecimal)].to[List]
+
   def getStandings(leagueId: UUID): ConnectionIO[List[LeagueStanding]] =
     sql"""SELECT id, league_id, team_id, total_points, tournaments_played, last_updated
           FROM league_standings WHERE league_id = $leagueId ORDER BY total_points DESC"""

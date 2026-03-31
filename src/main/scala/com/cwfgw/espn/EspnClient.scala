@@ -21,6 +21,11 @@ class EspnClient(httpClient: JHttpClient)(using LoggerFactory[IO]):
 
   private val logger = LoggerFactory[IO].getLogger
   private val baseUrl = "https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard"
+  private val tourUrls = List(
+    baseUrl,                                                                              // PGA Tour
+    "https://site.api.espn.com/apis/site/v2/sports/golf/liv/scoreboard",                  // LIV Golf
+    "https://site.api.espn.com/apis/site/v2/sports/golf/eur/scoreboard"                   // DP World Tour
+  )
 
   /** Fetch the scoreboard for a specific date. Returns the raw ESPN JSON. */
   def fetchScoreboard(date: LocalDate): IO[Json] =
@@ -136,6 +141,61 @@ class EspnClient(httpClient: JHttpClient)(using LoggerFactory[IO]):
             startDate <- j.hcursor.downField("startDate").as[String].toOption
           yield EspnCalendarEntry(id, label, startDate)
     yield entries
+
+  /** Fetch athletes from PGA, LIV, and DP World Tour scoreboards.
+    * Pulls recent tournaments from each tour to build a comprehensive player pool. */
+  def fetchActivePlayers: IO[List[EspnAthlete]] =
+    for
+      _ <- logger.info("Fetching athletes from PGA, LIV, and DP World Tour")
+
+      // Fetch from each tour's current scoreboard (gets the most recent/active event)
+      currentAthletes <- tourUrls.traverse: url =>
+        fetchAthletesFromUrl(url).handleErrorWith: e =>
+          logger.warn(s"Failed to fetch from $url: ${e.getMessage}") >>
+            IO.pure(Nil)
+
+      // Also fetch from recent PGA tournament dates for broader coverage
+      calendar <- fetchCalendar
+      recentDates = calendar
+        .flatMap(e => scala.util.Try(LocalDate.parse(e.startDate.take(10))).toOption)
+        .filter(_.isBefore(LocalDate.now().plusDays(1)))
+        .sorted.reverse
+        .take(6)
+
+      _ <- logger.info(s"Fetching PGA athletes from ${recentDates.size} recent tournaments")
+      historicalAthletes <- recentDates.traverse: date =>
+        fetchScoreboardAthletes(date).handleErrorWith: e =>
+          logger.warn(s"Failed to fetch athletes for $date: ${e.getMessage}") >>
+            IO.pure(Nil)
+
+      combined = (currentAthletes.flatten ++ historicalAthletes.flatten).distinctBy(_.espnId)
+      _ <- logger.info(s"Found ${combined.size} unique athletes across all tours")
+    yield combined
+
+  private def fetchAthletesFromUrl(url: String): IO[List[EspnAthlete]] =
+    val request = HttpRequest.newBuilder(URI.create(url)).GET().build()
+    for
+      response <- IO.blocking(httpClient.send(request, HttpResponse.BodyHandlers.ofString()))
+      json <- IO.fromEither(parse(response.body()).left.map(e => new RuntimeException(e.message)))
+    yield parseAthletesFromJson(json)
+
+  private def fetchScoreboardAthletes(date: LocalDate): IO[List[EspnAthlete]] =
+    val dateStr = date.format(DateTimeFormatter.BASIC_ISO_DATE)
+    val uri = URI.create(s"$baseUrl?dates=$dateStr")
+    val request = HttpRequest.newBuilder(uri).GET().build()
+    for
+      response <- IO.blocking(httpClient.send(request, HttpResponse.BodyHandlers.ofString()))
+      json <- IO.fromEither(parse(response.body()).left.map(e => new RuntimeException(e.message)))
+    yield parseAthletesFromJson(json)
+
+  private def parseAthletesFromJson(json: Json): List[EspnAthlete] =
+    json.hcursor.downField("events").as[List[Json]].toOption.getOrElse(Nil).flatMap: event =>
+      event.hcursor.downField("competitions").downArray
+        .downField("competitors").as[List[Json]].toOption.getOrElse(Nil).flatMap: c =>
+          for
+            id <- c.hcursor.downField("id").as[String].toOption
+            name <- c.hcursor.downField("athlete").downField("displayName").as[String].toOption
+          yield EspnAthlete(id, name)
 
 object EspnClient:
   def resource(using LoggerFactory[IO]): Resource[IO, EspnClient] =

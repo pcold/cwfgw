@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Castlewood Fantasy Golf</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <style>
     [x-cloak] { display: none !important; }
@@ -23,8 +24,12 @@
                 class="px-3 py-1.5 rounded text-sm font-medium transition">Weekly Report</button>
         <button @click="page = 'rosters'" :class="page === 'rosters' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
                 class="px-3 py-1.5 rounded text-sm font-medium transition">Rosters</button>
-        <button @click="page = 'sidebets'" :class="page === 'sidebets' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
-                class="px-3 py-1.5 rounded text-sm font-medium transition">Side Bets</button>
+        <button @click="page = 'rankings'; loadRankings()" :class="page === 'rankings' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
+                class="px-3 py-1.5 rounded text-sm font-medium transition">Rankings</button>
+        <button @click="page = 'sidebets'; loadReport()" :class="page === 'sidebets' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
+                class="px-3 py-1.5 rounded text-sm font-medium transition">Late Row Bets</button>
+        <button @click="page = 'admin'" :class="page === 'admin' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
+                class="px-3 py-1.5 rounded text-sm font-medium transition">Admin</button>
       </div>
     </div>
   </nav>
@@ -36,7 +41,7 @@
       <select x-model="selectedTournament" @change="loadScoreboard()"
               class="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm">
         <template x-for="t in tournaments" :key="t.id">
-          <option :value="t.id" x-text="t.name + (t.is_major ? ' (Major)' : '') + ' — ' + t.status"></option>
+          <option :value="t.id" x-text="'Wk ' + (t.metadata?.week || '?') + ' — ' + t.name + (t.is_major ? ' (Major)' : '') + ' — ' + t.status"></option>
         </template>
       </select>
       <span class="text-xs text-gray-500" x-show="scoreboardLoading">Loading...</span>
@@ -44,9 +49,20 @@
 
     <!-- SCOREBOARD PAGE -->
     <div x-show="page === 'scoreboard'">
-      <!-- Live preview banner -->
-      <div x-show="scoreboardData && !scoreboardData.completed" class="mb-4 px-4 py-2 bg-yellow-900/40 border border-yellow-700 rounded text-yellow-300 text-sm">
-        Tournament in progress — scores are live estimates
+      <!-- Not yet finalized banner with Finalize button -->
+      <div x-show="scoreboardData && tournaments.find(t => t.id === selectedTournament)?.status !== 'completed'"
+           class="mb-4 px-4 py-2 bg-yellow-900/40 border border-yellow-700 rounded text-yellow-300 text-sm flex items-center justify-between">
+        <span>Tournament in progress — scores are live estimates</span>
+        <button @click="finalizeTournament()" :disabled="finalizing"
+                class="ml-4 px-3 py-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded text-xs font-medium">
+          <span x-show="!finalizing">Finalize Results</span>
+          <span x-show="finalizing">Finalizing...</span>
+        </button>
+      </div>
+      <!-- Finalized banner -->
+      <div x-show="scoreboardData && tournaments.find(t => t.id === selectedTournament)?.status === 'completed'"
+           class="mb-4 px-4 py-2 bg-green-900/30 border border-green-700 rounded text-green-300 text-sm">
+        Results finalized
       </div>
 
       <!-- Team scores -->
@@ -74,7 +90,7 @@
                 <td class="px-4 py-3">
                   <template x-for="gs in team.golfer_scores" :key="gs.golfer_id">
                     <span class="inline-block mr-2 text-xs">
-                      <span class="text-gray-300" x-text="gs.golfer_name"></span>
+                      <span class="text-gray-300 cursor-pointer hover:underline" @click="showGolferHistory(gs.golfer_id)" x-text="gs.golfer_name"></span>
                       <span class="text-gray-500">T</span><span class="text-gray-400" x-text="gs.position"></span>
                       <span class="text-green-400 font-mono" x-text="'$' + Number(gs.payout).toFixed(2)"></span>
                       <span x-show="gs.ownership_pct < 100" class="text-gray-500 text-xs" x-text="'(' + gs.ownership_pct + '%)'"></span>
@@ -129,7 +145,7 @@
         <select x-model="reportTournament" @change="loadReport()"
                 class="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm">
           <template x-for="t in tournaments" :key="t.id">
-            <option :value="t.id" x-text="t.name + (t.is_major ? ' **' : '') + ' — ' + t.status"></option>
+            <option :value="t.id" x-text="'Wk ' + (t.metadata?.week || '?') + ' — ' + t.name + (t.is_major ? ' **' : '') + ' — ' + t.status"></option>
           </template>
         </select>
         <label class="flex items-center gap-2 text-sm cursor-pointer select-none">
@@ -177,19 +193,24 @@
               <tr class="bg-gray-800 hover:bg-gray-750">
                 <td class="border border-gray-700 px-1 py-1 text-center font-bold text-gray-400" x-text="round"></td>
                 <template x-for="team in report.teams" :key="team.team_id + '-' + round">
-                  <td class="border border-gray-700 px-1.5 py-1 text-center align-top">
+                  <td class="border border-gray-700 px-1.5 py-1 text-center align-top"
+                      :class="(round >= 5 && report.side_bet_detail?.find(r => r.round === round)?.teams?.filter(e => e.payout > 0)?.some(e => e.team_id === team.team_id)) ? 'bg-red-800'
+                        : team.rows[round-1]?.earnings > 0 ? 'bg-yellow-300'
+                        : ''">
                     <template x-if="team.rows[round-1]?.golfer_name">
-                      <div>
-                        <div class="font-semibold text-gray-200 truncate" x-text="team.rows[round-1].golfer_name"></div>
-                        <div x-show="team.rows[round-1].position_str" class="text-gray-400">
-                          <span x-text="team.rows[round-1].position_str"></span>
-                          <span x-show="team.rows[round-1].score_to_par" class="ml-0.5" x-text="team.rows[round-1].score_to_par"></span>
+                      <div x-data="{ isSideBetWinner: round >= 5 && report.side_bet_detail?.find(r => r.round === round)?.teams?.filter(e => e.payout > 0)?.some(e => e.team_id === team.team_id), hasEarnings: team.rows[round-1].earnings > 0 }">
+                        <div class="font-semibold truncate cursor-pointer hover:underline"
+                             :class="hasEarnings && !isSideBetWinner ? 'text-black' : 'text-gray-200'"
+                             @click="showGolferHistory(team.rows[round-1].golfer_id)"
+                             x-text="team.rows[round-1].golfer_name + (team.rows[round-1].ownership_pct < 100 ? ' (' + team.rows[round-1].ownership_pct + '%)' : '')"></div>
+                        <div class="font-mono"
+                             :class="hasEarnings ? (isSideBetWinner ? 'text-green-400' : 'text-green-700') : 'text-gray-500'"
+                             x-text="hasEarnings ? (team.rows[round-1].position_str || '') + ' - $' + Number(team.rows[round-1].earnings).toFixed(2) : '-'">
                         </div>
-                        <div x-show="team.rows[round-1].earnings > 0" class="text-green-400 font-mono font-bold"
-                             x-text="'$' + Number(team.rows[round-1].earnings).toFixed(2)">
+                        <div class="font-semibold"
+                             :class="hasEarnings && !isSideBetWinner ? 'text-black' : 'text-gray-200'"
+                             x-text="(team.rows[round-1].season_top_tens || 0) > 0 ? '$' + Number(team.rows[round-1].season_earnings || 0).toFixed(2) + ' (' + (team.rows[round-1].season_top_tens || 0) + ')' : '$0'">
                         </div>
-                        <div x-show="team.rows[round-1].ownership_pct < 100" class="text-gray-500"
-                             x-text="team.rows[round-1].ownership_pct + '%'"></div>
                       </div>
                     </template>
                     <template x-if="!team.rows[round-1]?.golfer_name">
@@ -209,7 +230,7 @@
               <template x-for="team in report.teams" :key="'tt-' + team.team_id">
                 <td class="border border-gray-600 px-1 py-1.5 text-center font-mono"
                     :class="team.top_tens > 0 ? 'text-green-400' : 'text-gray-500'"
-                    x-text="'$' + Number(team.top_tens).toFixed(0)"></td>
+                    x-text="'$' + Number(team.top_tens).toFixed(2)"></td>
               </template>
             </tr>
 
@@ -239,16 +260,17 @@
                 <td class="border border-gray-600 px-1 py-1.5 text-center font-mono"
                     :class="team.subtotal > 0 ? 'text-green-400' : team.subtotal < 0 ? 'text-red-400' : 'text-gray-500'">
                   <div x-text="fmtMoney(team.subtotal)"></div>
-                  <div class="text-gray-500 text-xs font-normal" x-text="'(' + team.top_ten_count + ')'"></div>
+                  <div class="text-gray-500 text-xs font-normal" x-text="fmtMoney(team.top_ten_money || 0) + ' (' + team.top_ten_count + ')'"></div>
                 </td>
               </template>
             </tr>
 
-            <!-- ROWS 5-6-7-8 (Side bets) -->
+            <!-- ROWS 5-6-7-8 (Late row bets) -->
             <tr class="bg-gray-800">
               <td class="border border-gray-700 px-1 py-1.5 text-center text-xs text-gray-400">ROWS 5-6-7-8</td>
               <template x-for="team in report.teams" :key="'sb-' + team.team_id">
-                <td class="border border-gray-700 px-1 py-1.5 text-center font-mono text-gray-400"
+                <td class="border border-gray-700 px-1 py-1.5 text-center font-mono"
+                    :class="team.side_bets > 0 ? 'text-green-400' : team.side_bets < 0 ? 'text-red-400' : 'text-gray-500'"
                     x-text="fmtMoney(team.side_bets)"></td>
               </template>
             </tr>
@@ -283,16 +305,521 @@
       </div>
     </div>
 
-    <!-- ROSTERS PAGE (placeholder) -->
-    <div x-show="page === 'rosters'">
+    <!-- ROSTERS PAGE -->
+    <div x-show="page === 'rosters'" x-init="$watch('page', v => { if (v === 'rosters') loadRosters() })">
       <h2 class="text-xl font-bold mb-4">Team Rosters</h2>
-      <p class="text-gray-500">Coming soon</p>
+      <span class="text-xs text-gray-500" x-show="rostersLoading">Loading...</span>
+
+      <!-- Grid view: teams as columns, rounds as rows -->
+      <div class="overflow-x-auto" x-show="rosterTeams.length > 0">
+        <table class="w-full text-xs border-collapse">
+          <!-- Team header row -->
+          <thead>
+            <tr class="bg-yellow-600 text-black font-bold">
+              <th class="border border-gray-600 px-1 py-1.5 w-12 text-center">RD</th>
+              <template x-for="(team, i) in rosterTeams" :key="team.team_id">
+                <th class="border border-gray-600 px-1 py-1.5 text-center min-w-[100px]">
+                  <div x-text="(i+1)"></div>
+                  <div x-text="team.team_name" class="text-xs"></div>
+                </th>
+              </template>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Draft round rows 1-8 -->
+            <template x-for="round in [1,2,3,4,5,6,7,8]" :key="round">
+              <tr class="bg-gray-800 hover:bg-gray-750" :class="round >= 5 ? 'bg-gray-800/70' : ''">
+                <td class="border border-gray-700 px-1 py-1.5 text-center font-bold text-gray-400" x-text="round"></td>
+                <template x-for="team in rosterTeams" :key="team.team_id + '-' + round">
+                  <td class="border border-gray-700 px-2 py-1.5 text-center">
+                    <template x-if="rosterPick(team, round)">
+                      <div>
+                        <div class="font-semibold text-gray-200 truncate" x-text="rosterPick(team, round).golfer_name"></div>
+                        <div x-show="rosterPick(team, round).ownership_pct < 100"
+                             class="text-gray-500 text-xs" x-text="rosterPick(team, round).ownership_pct + '%'"></div>
+                      </div>
+                    </template>
+                    <template x-if="!rosterPick(team, round)">
+                      <span class="text-gray-600">—</span>
+                    </template>
+                  </td>
+                </template>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Shared players callout -->
+      <div class="mt-4 text-xs text-gray-400" x-show="sharedPlayers.length > 0">
+        <span class="font-semibold text-gray-300">Shared Players:</span>
+        <template x-for="sp in sharedPlayers" :key="sp.name">
+          <span class="ml-3">
+            <span class="text-gray-200" x-text="sp.name"></span>
+            <template x-for="(owner, j) in sp.owners" :key="owner.team">
+              <span>
+                <span x-show="j > 0" class="text-gray-600"> / </span>
+                <span class="text-gray-400" x-text="owner.team + ' ' + owner.pct + '%'"></span>
+              </span>
+            </template>
+          </span>
+        </template>
+      </div>
+
+      <!-- No data state -->
+      <div x-show="rosterTeams.length === 0 && !rostersLoading" class="text-center text-gray-500 py-12">
+        No rosters uploaded yet. Use the Admin tab to upload team rosters.
+      </div>
     </div>
 
-    <!-- SIDE BETS PAGE (placeholder) -->
+    <!-- RANKINGS PAGE -->
+    <div x-show="page === 'rankings'">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-bold">Team Rankings</h2>
+        <div class="flex items-center gap-3">
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" x-model="rankingsLive" @change="loadRankings()"
+                   class="rounded border-gray-600 bg-gray-700">
+            <span class="text-gray-400">Live</span>
+          </label>
+          <span x-show="rankingsLoading" class="text-xs text-gray-500">Loading...</span>
+        </div>
+      </div>
+
+      <template x-if="rankings">
+        <div>
+          <!-- Rankings table -->
+          <div class="bg-gray-800 rounded-lg overflow-hidden mb-6">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-700 text-gray-300 text-xs uppercase tracking-wider">
+                <tr>
+                  <th class="px-4 py-3 text-left w-12">#</th>
+                  <th class="px-4 py-3 text-left">Team</th>
+                  <th class="px-4 py-3 text-right">Subtotal</th>
+                  <th class="px-4 py-3 text-right">Late Row Bets</th>
+                  <th class="px-4 py-3 text-right">Total Cash</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="(team, i) in rankings.teams" :key="team.team_id">
+                  <tr class="border-t border-gray-700 hover:bg-gray-750">
+                    <td class="px-4 py-3 text-gray-400" x-text="i + 1"></td>
+                    <td class="px-4 py-3 font-medium" x-text="team.team_name"></td>
+                    <td class="px-4 py-3 text-right font-mono"
+                        :class="team.subtotal > 0 ? 'text-green-400' : team.subtotal < 0 ? 'text-red-400' : 'text-gray-400'"
+                        x-text="fmtMoney(team.subtotal)"></td>
+                    <td class="px-4 py-3 text-right font-mono"
+                        :class="team.side_bets > 0 ? 'text-green-400' : team.side_bets < 0 ? 'text-red-400' : 'text-gray-400'"
+                        x-text="fmtMoney(team.side_bets)"></td>
+                    <td class="px-4 py-3 text-right font-mono font-bold"
+                        :class="team.total_cash > 0 ? 'text-green-400' : team.total_cash < 0 ? 'text-red-400' : 'text-gray-400'"
+                        x-text="fmtMoney(team.total_cash)"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Chart -->
+          <div class="bg-gray-800 rounded-lg p-4">
+            <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Cumulative Totals by Week</h3>
+            <div style="height: 400px; position: relative;">
+              <canvas id="rankingsChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <div x-show="!rankings && !rankingsLoading" class="text-center text-gray-500 py-12">
+        Loading rankings...
+      </div>
+    </div>
+
+    <!-- SIDE BETS PAGE -->
     <div x-show="page === 'sidebets'">
-      <h2 class="text-xl font-bold mb-4">Round 5-8 Side Bets</h2>
-      <p class="text-gray-500">Coming soon</p>
+      <h2 class="text-xl font-bold mb-4">Round 5-8 Late Row Bets</h2>
+      <p class="text-gray-400 text-sm mb-4">$15 per team per round. Highest cumulative earner in each draft round (5-8) wins $15 from every other team.</p>
+
+      <template x-if="!report">
+        <div class="text-gray-500">
+          <p>Load a weekly report first to see late row bet detail.</p>
+          <button @click="page = 'standings'; loadReport()" class="mt-2 px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm">Load Report</button>
+        </div>
+      </template>
+
+      <template x-if="report && report.side_bet_detail">
+        <div class="space-y-6">
+          <template x-for="rd in report.side_bet_detail" :key="rd.round">
+            <div class="bg-gray-800 rounded-lg p-4">
+              <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3" x-text="'Round ' + rd.round"></h3>
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                  <thead>
+                    <tr class="text-gray-400">
+                      <th class="text-left px-2 py-1">Team</th>
+                      <th class="text-left px-2 py-1">Golfer</th>
+                      <th class="text-right px-2 py-1">Cumulative $</th>
+                      <th class="text-right px-2 py-1">Late Row Bet</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="entry in rd.teams.slice().sort((a,b) => b.cumulative_earnings - a.cumulative_earnings)" :key="entry.team_id">
+                      <tr class="border-t border-gray-700">
+                        <td class="px-2 py-1.5" x-text="report.teams.find(t => t.team_id === entry.team_id)?.team_name || '?'"></td>
+                        <td class="px-2 py-1.5 font-mono" x-text="entry.golfer_name"></td>
+                        <td class="px-2 py-1.5 text-right font-mono" x-text="fmtMoney(entry.cumulative_earnings)"></td>
+                        <td class="px-2 py-1.5 text-right font-mono font-bold"
+                            :class="entry.payout > 0 ? 'text-green-400' : entry.payout < 0 ? 'text-red-400' : 'text-gray-500'"
+                            x-text="fmtMoney(entry.payout)"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </template>
+
+          <!-- Total late row bets summary -->
+          <div class="bg-gray-800 rounded-lg p-4">
+            <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Total Late Row Bets (All Rounds)</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs">
+                <thead>
+                  <tr class="text-gray-400">
+                    <th class="text-left px-2 py-1">Team</th>
+                    <th class="text-right px-2 py-1">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="team in report.teams.slice().sort((a,b) => b.side_bets - a.side_bets)" :key="'sbt-' + team.team_id">
+                    <tr class="border-t border-gray-700">
+                      <td class="px-2 py-1.5" x-text="team.team_name"></td>
+                      <td class="px-2 py-1.5 text-right font-mono font-bold"
+                          :class="team.side_bets > 0 ? 'text-green-400' : team.side_bets < 0 ? 'text-red-400' : 'text-gray-500'"
+                          x-text="fmtMoney(team.side_bets)"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- ADMIN PAGE -->
+    <div x-show="page === 'admin'">
+      <h2 class="text-xl font-bold mb-4">Admin</h2>
+
+      <!-- Upload Season Schedule -->
+      <div class="bg-gray-800 rounded-lg p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Upload Season Schedule</h3>
+
+        <div class="flex gap-4 mb-4">
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">League ID</label>
+            <input type="text" x-model="adminLeagueId"
+                   class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-80 font-mono"
+                   placeholder="11111111-1111-1111-1111-111111111111">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Season Year</label>
+            <input type="number" x-model.number="adminSeasonYear"
+                   class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-24">
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label class="block text-xs text-gray-400 mb-1">Schedule (paste text file contents)</label>
+          <textarea x-model="adminScheduleText" rows="16"
+                    class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-full font-mono leading-relaxed"
+                    placeholder="1 1 Jan 15-18 Sony Open
+2 2 Jan 22-25 The American Express
+3 3 Jan 29-Feb1 Farmers Insurance Open
+..."></textarea>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button @click="uploadSeason()"
+                  :disabled="adminUploading || !adminScheduleText.trim()"
+                  class="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded text-sm font-medium transition">
+            <span x-show="!adminUploading">Upload &amp; Validate with ESPN</span>
+            <span x-show="adminUploading">Uploading...</span>
+          </button>
+          <span x-show="adminError" class="text-red-400 text-sm" x-text="adminError"></span>
+        </div>
+      </div>
+
+      <!-- Upload Result (Season) -->
+      <div class="bg-gray-800 rounded-lg p-6 mb-6" x-show="adminResult">
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Upload Result</h3>
+
+        <div class="flex gap-6 mb-4 text-sm">
+          <div>
+            <span class="text-gray-400">Season:</span>
+            <span class="text-white font-bold ml-1" x-text="adminResult?.season_year"></span>
+          </div>
+          <div>
+            <span class="text-gray-400">Created:</span>
+            <span class="text-green-400 font-bold ml-1" x-text="adminResult?.tournaments_created"></span>
+          </div>
+          <div>
+            <span class="text-gray-400">ESPN Matched:</span>
+            <span class="text-green-400 font-bold ml-1" x-text="adminResult?.espn_matched"></span>
+          </div>
+          <div x-show="adminResult?.espn_unmatched?.length > 0">
+            <span class="text-gray-400">Unmatched:</span>
+            <span class="text-yellow-400 font-bold ml-1" x-text="adminResult?.espn_unmatched?.length"></span>
+          </div>
+        </div>
+
+        <!-- Unmatched warnings -->
+        <div x-show="adminResult?.espn_unmatched?.length > 0" class="mb-4 px-3 py-2 bg-yellow-900/30 border border-yellow-700 rounded text-yellow-300 text-xs">
+          <span class="font-semibold">ESPN unmatched:</span>
+          <template x-for="name in adminResult?.espn_unmatched || []" :key="name">
+            <span class="ml-2" x-text="name"></span>
+          </template>
+        </div>
+
+        <!-- Tournament table -->
+        <table class="w-full text-sm">
+          <thead class="bg-gray-700 text-gray-300 text-xs uppercase tracking-wider">
+            <tr>
+              <th class="px-3 py-2 text-left">Wk</th>
+              <th class="px-3 py-2 text-left">Tournament</th>
+              <th class="px-3 py-2 text-left">Dates</th>
+              <th class="px-3 py-2 text-center">Major</th>
+              <th class="px-3 py-2 text-left">ESPN Match</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="t in adminResult?.tournaments || []" :key="t.id">
+              <tr class="border-t border-gray-700">
+                <td class="px-3 py-2 text-gray-400 font-mono" x-text="t.week"></td>
+                <td class="px-3 py-2 font-medium" x-text="t.name"></td>
+                <td class="px-3 py-2 text-gray-400 text-xs" x-text="t.start_date + ' to ' + t.end_date"></td>
+                <td class="px-3 py-2 text-center" x-text="t.is_major ? '$$' : ''"></td>
+                <td class="px-3 py-2 text-xs" :class="t.espn_id ? 'text-green-400' : 'text-yellow-400'">
+                  <span x-show="t.espn_id" x-text="t.espn_name + ' (' + t.espn_id + ')'"></span>
+                  <span x-show="!t.espn_id">No match</span>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Upload Team Rosters -->
+      <div class="bg-gray-800 rounded-lg p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Upload Team Rosters</h3>
+
+        <!-- Step 1: Paste roster text -->
+        <div x-show="!rosterPreview">
+          <div class="mb-4">
+            <label class="block text-xs text-gray-400 mb-1">Roster (paste text — TEAM headers + round/player lines)</label>
+            <textarea x-model="rosterText" rows="20"
+                      class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-full font-mono leading-relaxed"
+                      placeholder="TEAM 1 BROWN
+1 SCHEFFLER 75
+2 ROSE
+3 LOWRY
+...
+
+TEAM 2 BURRELL
+1 HOVLAND
+2 FLEETWOOD
+..."></textarea>
+          </div>
+
+          <div class="flex items-center gap-4">
+            <button @click="previewRoster()"
+                    :disabled="rosterUploading || !rosterText.trim()"
+                    class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded text-sm font-medium transition">
+              <span x-show="!rosterUploading">Match Players with ESPN</span>
+              <span x-show="rosterUploading">Matching...</span>
+            </button>
+            <span x-show="rosterError" class="text-red-400 text-sm" x-text="rosterError"></span>
+          </div>
+        </div>
+
+        <!-- Step 2: Review ESPN matches -->
+        <div x-show="rosterPreview">
+          <div class="flex gap-6 mb-4 text-sm">
+            <div>
+              <span class="text-gray-400">Total Picks:</span>
+              <span class="text-white font-bold ml-1" x-text="rosterPreview?.total_picks"></span>
+            </div>
+            <div>
+              <span class="text-gray-400">Exact Matches:</span>
+              <span class="text-green-400 font-bold ml-1" x-text="rosterPreview?.exact_matches"></span>
+            </div>
+            <div x-show="rosterPreview?.ambiguous > 0">
+              <span class="text-gray-400">Ambiguous:</span>
+              <span class="text-yellow-400 font-bold ml-1" x-text="rosterPreview?.ambiguous"></span>
+            </div>
+            <div x-show="rosterPreview?.no_match > 0">
+              <span class="text-gray-400">No Match:</span>
+              <span class="text-red-400 font-bold ml-1" x-text="rosterPreview?.no_match"></span>
+            </div>
+          </div>
+
+          <template x-for="(team, ti) in rosterPreview?.teams || []" :key="team.team_name">
+            <div class="mb-4">
+              <div class="text-sm font-bold text-gray-200 mb-1">
+                <span class="text-gray-400" x-text="'#' + team.team_number"></span>
+                <span class="ml-1" x-text="team.team_name"></span>
+              </div>
+              <table class="w-full text-xs">
+                <tbody>
+                  <template x-for="(pick, pi) in team.picks" :key="pick.input_name + pick.round">
+                    <tr class="border-t border-gray-700">
+                      <td class="px-2 py-1.5 text-gray-400 w-8" x-text="'R' + pick.round"></td>
+                      <td class="px-2 py-1.5 font-mono" x-text="pick.input_name"></td>
+                      <td class="px-2 py-1.5 text-center w-10" x-show="pick.ownership_pct < 100"
+                          x-text="pick.ownership_pct + '%'"></td>
+                      <td class="px-2 py-1.5 w-6 text-center">
+                        <span x-show="pick.match_status === 'exact'" class="text-green-400">&#10003;</span>
+                        <span x-show="pick.match_status === 'ambiguous'" class="text-yellow-400">?</span>
+                        <span x-show="pick.match_status === 'no_match'" class="text-red-400">&#10007;</span>
+                      </td>
+                      <td class="px-2 py-1.5">
+                        <!-- Exact match -->
+                        <span x-show="pick.match_status === 'exact'" class="text-green-400" x-text="pick.espn_name"></span>
+
+                        <!-- Ambiguous: show dropdown -->
+                        <template x-if="pick.match_status === 'ambiguous'">
+                          <select x-model="rosterPreview.teams[ti].picks[pi].selectedEspn"
+                                  class="bg-gray-700 border border-yellow-600 rounded px-2 py-1 text-xs">
+                            <option value="">-- select player --</option>
+                            <template x-for="s in pick.suggestions" :key="s.espn_id">
+                              <option :value="s.espn_id + '|' + s.name" x-text="s.name + ' (' + s.espn_id + ')'"></option>
+                            </template>
+                            <option value="none">None of these (create new)</option>
+                          </select>
+                        </template>
+
+                        <!-- No match -->
+                        <span x-show="pick.match_status === 'no_match'" class="text-red-400 text-xs">Will create new golfer</span>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </template>
+
+          <div class="flex items-center gap-4 mt-4">
+            <button @click="confirmRoster()"
+                    :disabled="rosterConfirming"
+                    class="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white px-4 py-2 rounded text-sm font-medium transition">
+              <span x-show="!rosterConfirming">Confirm &amp; Create Teams</span>
+              <span x-show="rosterConfirming">Creating...</span>
+            </button>
+            <button @click="rosterPreview = null; rosterResult = null"
+                    class="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded text-sm font-medium transition">
+              Back
+            </button>
+            <span x-show="rosterError" class="text-red-400 text-sm" x-text="rosterError"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reset Tournament Results -->
+      <div class="bg-gray-800 rounded-lg p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Reset Tournament Results</h3>
+        <p class="text-xs text-gray-400 mb-4">Delete all scores and results for a finalized tournament, resetting it back to upcoming status.</p>
+
+        <div class="flex items-center gap-4">
+          <select x-model="resetTournamentId"
+                  class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-80">
+            <option value="">-- select completed tournament --</option>
+            <template x-for="t in tournaments.filter(t => t.status === 'completed')" :key="t.id">
+              <option :value="t.id" x-text="'Wk ' + (t.metadata?.week || '?') + ' — ' + t.name"></option>
+            </template>
+          </select>
+          <button @click="resetTournament()"
+                  :disabled="resettingTournament || !resetTournamentId"
+                  class="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded text-sm font-medium transition">
+            <span x-show="!resettingTournament">Reset Results</span>
+            <span x-show="resettingTournament">Resetting...</span>
+          </button>
+        </div>
+        <span x-show="resetMessage" class="block mt-3 text-sm" :class="resetError ? 'text-red-400' : 'text-green-400'" x-text="resetMessage"></span>
+      </div>
+
+      <!-- Roster Confirm Result -->
+      <div class="bg-gray-800 rounded-lg p-6" x-show="rosterResult">
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Rosters Created</h3>
+
+        <div class="flex gap-6 mb-4 text-sm">
+          <div>
+            <span class="text-gray-400">Teams:</span>
+            <span class="text-green-400 font-bold ml-1" x-text="rosterResult?.teams_created"></span>
+          </div>
+          <div>
+            <span class="text-gray-400">New Golfers:</span>
+            <span class="text-blue-400 font-bold ml-1" x-text="rosterResult?.golfers_created"></span>
+          </div>
+        </div>
+
+        <template x-for="team in rosterResult?.teams || []" :key="team.team_id">
+          <div class="mb-3">
+            <div class="text-sm font-bold text-gray-200 mb-1">
+              <span class="text-gray-400" x-text="'#' + team.team_number"></span>
+              <span class="ml-1" x-text="team.team_name"></span>
+            </div>
+            <div class="flex flex-wrap gap-2 text-xs">
+              <template x-for="pick in team.picks" :key="pick.golfer_id">
+                <span class="bg-gray-700 px-2 py-1 rounded">
+                  <span class="text-gray-400" x-text="'R' + pick.round"></span>
+                  <span class="ml-1 cursor-pointer hover:underline" @click="showGolferHistory(pick.golfer_id)" x-text="pick.golfer_name"></span>
+                  <span x-show="pick.ownership_pct < 100" class="text-gray-500 ml-1" x-text="pick.ownership_pct + '%'"></span>
+                </span>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- GOLFER HISTORY MODAL -->
+    <div x-show="golferModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" @click.self="golferModal = null">
+      <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4 overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-700 flex items-center justify-between">
+          <h3 class="text-lg font-bold" x-text="golferModal?.golfer_name || ''"></h3>
+          <button @click="golferModal = null" class="text-gray-400 hover:text-white text-xl">&times;</button>
+        </div>
+        <div class="px-5 py-4">
+          <div x-show="golferModalLoading" class="text-center text-gray-500 py-4">Loading...</div>
+          <template x-if="golferModal && !golferModalLoading">
+            <div>
+              <div class="flex justify-between text-sm text-gray-400 mb-3">
+                <span x-text="golferModal.top_tens + ' top 10' + (golferModal.top_tens !== 1 ? 's' : '')"></span>
+                <span class="text-green-400 font-mono font-bold" x-text="fmtMoney(golferModal.total_earnings)"></span>
+              </div>
+              <table class="w-full text-sm" x-show="golferModal.results?.length > 0">
+                <thead class="text-gray-400 text-xs uppercase">
+                  <tr>
+                    <th class="text-left px-2 py-1">Tournament</th>
+                    <th class="text-right px-2 py-1">Place</th>
+                    <th class="text-right px-2 py-1">Money</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="r in golferModal.results" :key="r.tournament">
+                    <tr class="border-t border-gray-700">
+                      <td class="px-2 py-1.5" x-text="r.tournament"></td>
+                      <td class="px-2 py-1.5 text-right font-mono" x-text="r.position"></td>
+                      <td class="px-2 py-1.5 text-right font-mono text-green-400" x-text="fmtMoney(r.earnings)"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+              <p x-show="!golferModal.results?.length" class="text-gray-500 text-center py-4">No top 10 finishes this season</p>
+            </div>
+          </template>
+        </div>
+      </div>
     </div>
 
   </main>
@@ -315,10 +842,44 @@
         scoreboardData: null,
         scoreboardTeams: [],
         scoreboardLoading: false,
+        finalizing: false,
+        rankings: null,
+        rankingsLive: false,
+        rankingsLoading: false,
+        rankingsChart: null,
+        golferModal: null,
+        golferModalLoading: false,
         report: null,
         reportTournament: null,
         reportLive: false,
         reportLoading: false,
+
+        // Admin state
+        adminLeagueId: LEAGUE_ID,
+        adminSeasonYear: new Date().getFullYear(),
+        adminScheduleText: '',
+        adminUploading: false,
+        adminResult: null,
+        adminError: '',
+
+        // Reset tournament state
+        resetTournamentId: '',
+        resettingTournament: false,
+        resetMessage: '',
+        resetError: false,
+
+        // Roster view state
+        rosterTeams: [],
+        rostersLoading: false,
+        sharedPlayers: [],
+
+        // Roster upload state (two-step)
+        rosterText: '',
+        rosterUploading: false,
+        rosterPreview: null,
+        rosterConfirming: false,
+        rosterResult: null,
+        rosterError: '',
 
         fmtMoney,
 
@@ -353,11 +914,56 @@
           if (!tournament) { this.scoreboardLoading = false; return; }
 
           if (tournament.status === 'completed') {
-            const resp = await fetch(`/api/v1/leagues/${LEAGUE_ID}/scoring/calculate/${this.selectedTournament}`, { method: 'POST' });
+            // Use persisted report data for completed tournaments
+            const resp = await fetch(`/api/v1/leagues/${LEAGUE_ID}/report/${this.selectedTournament}`);
             if (resp.ok) {
               const data = await resp.json();
-              this.scoreboardData = { completed: true, teams: data.teams || [] };
-              this.scoreboardTeams = (data.teams || []).sort((a, b) => b.weekly_total - a.weekly_total);
+              // Transform report teams into scoreboard format
+              const teams = (data.teams || []).map(t => ({
+                team_id: t.team_id,
+                team_name: t.team_name,
+                top_ten_earnings: Number(t.top_tens),
+                weekly_total: Number(t.weekly_total),
+                golfer_scores: t.rows.filter(r => r.earnings > 0).map(r => ({
+                  golfer_name: r.golfer_name,
+                  golfer_id: r.golfer_id,
+                  position: parseInt((r.position_str || '').replace('T', '')),
+                  payout: Number(r.earnings),
+                  ownership_pct: Number(r.ownership_pct)
+                }))
+              }));
+              // Build leaderboard from undrafted_top_tens + team golfers with earnings
+              const leaderboard = (data.undrafted_top_tens || []).map(e => ({
+                name: e.name,
+                position: e.position,
+                score_to_par: null,
+                rostered: false,
+                team_name: null
+              }));
+              // Add rostered golfers with results
+              (data.teams || []).forEach(t => {
+                t.rows.forEach(r => {
+                  if (r.position_str) {
+                    leaderboard.push({
+                      name: r.golfer_name,
+                      position: parseInt((r.position_str || '').replace('T', '')),
+                      score_to_par: r.score_to_par ? (r.score_to_par === 'E' ? 0 : parseInt(r.score_to_par)) : null,
+                      rostered: true,
+                      team_name: t.team_name
+                    });
+                  }
+                });
+              });
+              leaderboard.sort((a, b) => (a.position || 99) - (b.position || 99));
+              // Deduplicate by name (shared golfers appear on multiple teams)
+              const seen = new Set();
+              const uniqueLeaderboard = leaderboard.filter(e => {
+                if (seen.has(e.name)) return false;
+                seen.add(e.name);
+                return true;
+              });
+              this.scoreboardData = { completed: true, teams, leaderboard: uniqueLeaderboard.slice(0, 20) };
+              this.scoreboardTeams = teams.sort((a, b) => b.weekly_total - a.weekly_total);
             }
           } else {
             const resp = await fetch(`/api/v1/espn/preview/${LEAGUE_ID}?date=${tournament.start_date}`);
@@ -371,6 +977,263 @@
             }
           }
           this.scoreboardLoading = false;
+        },
+
+        async finalizeTournament() {
+          if (!this.selectedTournament) return;
+          this.finalizing = true;
+          try {
+            const resp = await fetch(`/api/v1/espn/finalize/${this.selectedTournament}`, { method: 'POST' });
+            const data = await resp.json();
+            if (resp.ok) {
+              // Reload tournaments list (status changed) and scoreboard
+              await this.loadTournaments();
+              this.selectedTournament = this.selectedTournament; // preserve selection
+              await this.loadScoreboard();
+            } else {
+              alert('Finalize failed: ' + (data.error || 'Unknown error'));
+            }
+          } catch (e) {
+            alert('Finalize failed: ' + e.message);
+          }
+          this.finalizing = false;
+        },
+
+        async showGolferHistory(golferId) {
+          if (!golferId) return;
+          this.golferModalLoading = true;
+          this.golferModal = { golfer_name: 'Loading...', results: [], top_tens: 0, total_earnings: 0 };
+          const resp = await fetch(`/api/v1/leagues/${LEAGUE_ID}/golfer/${golferId}/history`);
+          if (resp.ok) {
+            this.golferModal = await resp.json();
+          }
+          this.golferModalLoading = false;
+        },
+
+        async loadRankings() {
+          this.rankingsLoading = true;
+          const liveParam = this.rankingsLive ? '?live=true' : '';
+          const resp = await fetch(`/api/v1/leagues/${LEAGUE_ID}/rankings${liveParam}`);
+          if (resp.ok) {
+            this.rankings = await resp.json();
+            this.$nextTick(() => this.renderRankingsChart());
+          }
+          this.rankingsLoading = false;
+        },
+
+        renderRankingsChart() {
+          const canvas = document.getElementById('rankingsChart');
+          if (!canvas || !this.rankings) return;
+          if (this.rankingsChart) this.rankingsChart.destroy();
+
+          const colors = [
+            '#ef4444','#f97316','#eab308','#22c55e','#14b8a6','#3b82f6','#6366f1','#a855f7',
+            '#ec4899','#f43f5e','#84cc16','#06b6d4','#8b5cf6'
+          ];
+          const weeks = this.rankings.weeks || [];
+          const datasets = this.rankings.teams.map((team, i) => ({
+            label: team.team_name,
+            data: team.series || [],
+            borderColor: colors[i % colors.length],
+            backgroundColor: colors[i % colors.length] + '20',
+            borderWidth: 2,
+            pointRadius: 3,
+            tension: 0.3
+          }));
+
+          this.rankingsChart = new Chart(canvas, {
+            type: 'line',
+            data: { labels: weeks.map(w => 'Wk ' + w), datasets },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  position: 'bottom',
+                  labels: { color: '#9ca3af', boxWidth: 12, padding: 12, font: { size: 11 } }
+                },
+                tooltip: {
+                  callbacks: {
+                    title: (items) => {
+                      const idx = items[0]?.dataIndex;
+                      return (this.rankings.tournament_names || [])[idx] || items[0]?.label;
+                    },
+                    label: (item) => item.dataset.label + ': ' + fmtMoney(item.raw)
+                  }
+                }
+              },
+              scales: {
+                x: { ticks: { color: '#9ca3af' }, grid: { color: '#374151' } },
+                y: {
+                  ticks: { color: '#9ca3af', callback: v => '$' + v },
+                  grid: { color: '#374151' }
+                }
+              }
+            }
+          });
+        },
+
+        rosterPick(team, round) {
+          return team.picks?.find(p => p.round === round) || null;
+        },
+
+        async loadRosters() {
+          this.rostersLoading = true;
+          const resp = await fetch(`/api/v1/leagues/${LEAGUE_ID}/rosters`);
+          if (resp.ok) {
+            this.rosterTeams = await resp.json();
+            // Find shared players (appear on multiple teams with < 100% ownership)
+            const playerMap = {};
+            for (const team of this.rosterTeams) {
+              for (const pick of (team.picks || [])) {
+                if (pick.ownership_pct < 100) {
+                  if (!playerMap[pick.golfer_name]) playerMap[pick.golfer_name] = [];
+                  playerMap[pick.golfer_name].push({ team: team.team_name, pct: pick.ownership_pct });
+                }
+              }
+            }
+            this.sharedPlayers = Object.entries(playerMap)
+              .filter(([_, owners]) => owners.length > 1)
+              .map(([name, owners]) => ({ name, owners }));
+          }
+          this.rostersLoading = false;
+        },
+
+        async uploadSeason() {
+          this.adminUploading = true;
+          this.adminError = '';
+          this.adminResult = null;
+
+          try {
+            const resp = await fetch('/api/v1/admin/season', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                league_id: this.adminLeagueId,
+                season_year: this.adminSeasonYear,
+                schedule: this.adminScheduleText
+              })
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+              this.adminResult = data;
+              // Reload tournaments list
+              await this.loadTournaments();
+            } else {
+              this.adminError = data.error || 'Upload failed';
+            }
+          } catch (e) {
+            this.adminError = e.message;
+          }
+          this.adminUploading = false;
+        },
+
+        async previewRoster() {
+          this.rosterUploading = true;
+          this.rosterError = '';
+          this.rosterPreview = null;
+          this.rosterResult = null;
+
+          try {
+            const resp = await fetch('/api/v1/admin/roster/preview', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ roster: this.rosterText })
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+              // Pre-select exact matches and init selectedEspn for ambiguous
+              for (const team of data.teams) {
+                for (const pick of team.picks) {
+                  if (pick.match_status === 'exact') {
+                    pick.selectedEspn = pick.espn_id + '|' + pick.espn_name;
+                  } else {
+                    pick.selectedEspn = '';
+                  }
+                }
+              }
+              this.rosterPreview = data;
+            } else {
+              this.rosterError = data.error || 'Preview failed';
+            }
+          } catch (e) {
+            this.rosterError = e.message;
+          }
+          this.rosterUploading = false;
+        },
+
+        async confirmRoster() {
+          this.rosterConfirming = true;
+          this.rosterError = '';
+
+          // Build confirmed teams from preview + user selections
+          const teams = this.rosterPreview.teams.map(team => ({
+            team_number: team.team_number,
+            team_name: team.team_name,
+            picks: team.picks.map(pick => {
+              let espnId = null, espnName = null;
+              if (pick.selectedEspn && pick.selectedEspn !== 'none') {
+                const parts = pick.selectedEspn.split('|', 2);
+                espnId = parts[0];
+                espnName = parts[1] || null;
+              }
+              return {
+                round: pick.round,
+                player_name: pick.input_name,
+                ownership_pct: pick.ownership_pct,
+                espn_id: espnId,
+                espn_name: espnName
+              };
+            })
+          }));
+
+          try {
+            const resp = await fetch('/api/v1/admin/roster/confirm', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                league_id: this.adminLeagueId,
+                teams: teams
+              })
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+              this.rosterResult = data;
+              this.rosterPreview = null;
+            } else {
+              this.rosterError = data.error || 'Confirm failed';
+            }
+          } catch (e) {
+            this.rosterError = e.message;
+          }
+          this.rosterConfirming = false;
+        },
+
+        async resetTournament() {
+          if (!this.resetTournamentId) return;
+          const tournament = this.tournaments.find(t => t.id === this.resetTournamentId);
+          const name = tournament ? tournament.name : this.resetTournamentId;
+          if (!confirm(`Are you sure you want to reset "${name}"?\n\nThis will delete all scores and results for this tournament and set it back to upcoming.`)) return;
+          this.resettingTournament = true;
+          this.resetMessage = '';
+          this.resetError = false;
+          try {
+            const resp = await fetch(`/api/v1/espn/reset/${this.resetTournamentId}`, { method: 'POST' });
+            const data = await resp.json();
+            if (resp.ok) {
+              this.resetMessage = data.message;
+              this.resetError = false;
+              this.resetTournamentId = '';
+              await this.loadTournaments();
+            } else {
+              this.resetMessage = data.error || 'Reset failed';
+              this.resetError = true;
+            }
+          } catch (e) {
+            this.resetMessage = e.message;
+            this.resetError = true;
+          }
+          this.resettingTournament = false;
         },
 
         async loadReport() {

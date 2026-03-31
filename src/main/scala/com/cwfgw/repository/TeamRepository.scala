@@ -9,10 +9,10 @@ import com.cwfgw.domain.*
 
 object TeamRepository:
 
-  private val selectCols = fr"id, league_id, owner_name, team_name, created_at, updated_at"
+  private val selectCols = fr"id, league_id, owner_name, team_name, team_number, created_at, updated_at"
 
   def findByLeague(leagueId: UUID): ConnectionIO[List[Team]] =
-    (fr"SELECT" ++ selectCols ++ fr"FROM teams WHERE league_id = $leagueId ORDER BY team_name")
+    (fr"SELECT" ++ selectCols ++ fr"FROM teams WHERE league_id = $leagueId ORDER BY team_number ASC NULLS LAST, team_name")
       .query[Team].to[List]
 
   def findById(id: UUID): ConnectionIO[Option[Team]] =
@@ -20,8 +20,8 @@ object TeamRepository:
       .query[Team].option
 
   def create(leagueId: UUID, req: CreateTeam): ConnectionIO[Team] =
-    sql"""INSERT INTO teams (league_id, owner_name, team_name)
-          VALUES ($leagueId, ${req.ownerName}, ${req.teamName})
+    sql"""INSERT INTO teams (league_id, owner_name, team_name, team_number)
+          VALUES ($leagueId, ${req.ownerName}, ${req.teamName}, ${req.teamNumber})
           RETURNING $selectCols"""
       .query[Team].unique
 
@@ -53,6 +53,16 @@ object TeamRepository:
           WHERE t.league_id = $leagueId AND r.dropped_at IS NULL
           ORDER BY r.draft_round ASC NULLS LAST"""
       .query[RosterEntry].to[List]
+
+  /** Roster entries joined with golfer names, for a whole league. */
+  def getRosterViewByLeague(leagueId: UUID): ConnectionIO[List[(UUID, String, Int, String, String, BigDecimal, UUID)]] =
+    sql"""SELECT t.id, t.team_name, r.draft_round, g.first_name, g.last_name, r.ownership_pct, g.id
+          FROM team_rosters r
+          JOIN teams t ON r.team_id = t.id
+          JOIN golfers g ON r.golfer_id = g.id
+          WHERE t.league_id = $leagueId AND r.dropped_at IS NULL
+          ORDER BY t.created_at, r.draft_round ASC NULLS LAST"""
+      .query[(UUID, String, Int, String, String, BigDecimal, UUID)].to[List]
 
   def dropFromRoster(teamId: UUID, golferId: UUID): ConnectionIO[Boolean] =
     sql"""UPDATE team_rosters SET dropped_at = now(), is_active = false

@@ -23,6 +23,12 @@ case class EspnCompetitor(
 ):
   def madeCut: Boolean = status != "2" && status != "3" && status != "4"
 
+/** A PGA player from ESPN. */
+case class EspnAthlete(
+    espnId: String,
+    name: String
+)
+
 /** A calendar entry from the ESPN season schedule. */
 case class EspnCalendarEntry(
     id: String,

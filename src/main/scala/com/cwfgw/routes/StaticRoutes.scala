@@ -5,31 +5,33 @@ import org.http4s.*
 import org.http4s.dsl.io.*
 import org.http4s.headers.`Content-Type`
 
+import scala.io.Source
+
 object StaticRoutes:
 
   private val classLoader = getClass.getClassLoader
 
   def routes: HttpRoutes[IO] = HttpRoutes.of[IO]:
-    // Serve index.html for root and SPA routes
     case GET -> Root =>
-      serveResource("static/index.html", MediaType.text.html)
+      serveClasspath("static/index.html", `Content-Type`(MediaType.text.html))
 
-    // Serve static assets (js, css, images)
-    case req @ GET -> "static" /: path =>
-      val filePath = s"static/${path.segments.map(_.encoded).mkString("/")}"
-      val mediaType = filePath match
-        case p if p.endsWith(".js")   => MediaType.application.javascript
-        case p if p.endsWith(".css")  => MediaType.text.css
-        case p if p.endsWith(".html") => MediaType.text.html
-        case p if p.endsWith(".svg")  => MediaType.image.`svg+xml`
-        case p if p.endsWith(".png")  => MediaType.image.png
+    case GET -> Root / "static" / file =>
+      val mediaType = file match
+        case f if f.endsWith(".js")   => MediaType.application.javascript
+        case f if f.endsWith(".css")  => MediaType.text.css
+        case f if f.endsWith(".html") => MediaType.text.html
+        case f if f.endsWith(".svg")  => MediaType.image.`svg+xml`
+        case f if f.endsWith(".png")  => MediaType.image.png
         case _                        => MediaType.application.`octet-stream`
-      serveResource(filePath, mediaType)
+      serveClasspath(s"static/$file", `Content-Type`(mediaType))
 
-  private def serveResource(path: String, mediaType: MediaType): IO[Response[IO]] =
-    Option(classLoader.getResource(path)) match
-      case Some(url) =>
-        StaticFile.fromURL(url, None)
-          .map(_.withContentType(`Content-Type`(mediaType)))
-          .getOrElseF(NotFound())
+  private def serveClasspath(path: String, contentType: `Content-Type`): IO[Response[IO]] =
+    IO.blocking(Option(classLoader.getResourceAsStream(path))).flatMap:
       case None => NotFound()
+      case Some(is) =>
+        IO.blocking:
+          val bytes = is.readAllBytes()
+          is.close()
+          bytes
+        .flatMap: bytes =>
+          Ok(bytes).map(_.withContentType(contentType))

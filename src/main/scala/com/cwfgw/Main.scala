@@ -11,7 +11,6 @@ import org.typelevel.log4cats.slf4j.Slf4jFactory
 import com.cwfgw.config.AppConfig
 import com.cwfgw.db.{Database, FlywayMigrator}
 import com.cwfgw.espn.EspnClient
-import com.cwfgw.scheduler.TournamentScheduler
 import com.cwfgw.service.*
 import com.cwfgw.routes.*
 
@@ -42,12 +41,13 @@ object Main extends IOApp:
           val scoringService = ScoringService(xa)
           val espnImportService = EspnImportService(espnClient, xa)
           val weeklyReportService = WeeklyReportService(espnImportService, xa)
+          val adminService = AdminService(espnClient, xa)
           val weeklyJobService = WeeklyJobService(espnImportService, scoringService, xa)
-          val scheduler = TournamentScheduler(weeklyJobService)
 
           val allRoutes =
             StaticRoutes.routes
               <+> HealthRoutes.routes
+              <+> AdminRoutes.routes(adminService)
               <+> LeagueRoutes.routes(leagueService)
               <+> GolferRoutes.routes(golferService)
               <+> TournamentRoutes.routes(tournamentService)
@@ -57,14 +57,11 @@ object Main extends IOApp:
               <+> ReportRoutes.routes(weeklyReportService)
               <+> EspnRoutes.routes(espnImportService, weeklyJobService)
 
-          // Start scheduler as a background fiber alongside the HTTP server
-          scheduler.start.start.flatMap: schedulerFiber =>
-            EmberServerBuilder
-              .default[IO]
-              .withHost(config.server.http4sHost)
-              .withPort(config.server.http4sPort)
-              .withHttpApp(Router("/" -> allRoutes).orNotFound)
-              .build
-              .useForever
-              .guarantee(schedulerFiber.cancel)
+          EmberServerBuilder
+            .default[IO]
+            .withHost(config.server.http4sHost)
+            .withPort(config.server.http4sPort)
+            .withHttpApp(Router("/" -> allRoutes).orNotFound)
+            .build
+            .useForever
     yield ExitCode.Success

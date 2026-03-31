@@ -82,6 +82,18 @@ object EspnRoutes:
         case Right(results) => Ok(Json.arr(results.map(resultToJson)*))
         case Left(err) => BadRequest(Json.obj("error" -> err.asJson))
 
+    // Finalize a tournament: POST /api/v1/espn/finalize/:tournamentId
+    case POST -> Root / "api" / "v1" / "espn" / "finalize" / UUIDVar(tournamentId) =>
+      jobService.finalizeTournament(tournamentId).flatMap:
+        case Right(msg) => Ok(Json.obj("message" -> msg.asJson))
+        case Left(err) => BadRequest(Json.obj("error" -> err.asJson))
+
+    // Reset a finalized tournament: POST /api/v1/espn/reset/:tournamentId
+    case POST -> Root / "api" / "v1" / "espn" / "reset" / UUIDVar(tournamentId) =>
+      jobService.resetTournament(tournamentId).flatMap:
+        case Right(msg) => Ok(Json.obj("message" -> msg.asJson))
+        case Left(err) => BadRequest(Json.obj("error" -> err.asJson))
+
     // Manually trigger the weekly job: POST /api/v1/espn/process
     case POST -> Root / "api" / "v1" / "espn" / "process" =>
       jobService.processAll.flatMap: (completed, pending) =>
