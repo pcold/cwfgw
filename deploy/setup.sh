@@ -4,8 +4,8 @@
 set -euo pipefail
 
 PROJECT_ID="${1:?Usage: ./deploy/setup.sh PROJECT_ID}"
-REGION="us-central1"
-SQL_INSTANCE="cwfgw-db"
+REGION="us-west1"
+SQL_INSTANCE="cwfgw-sandbox"
 DB_NAME="cwfgw"
 DB_USER="cwfgw"
 REPO="cwfgw"
@@ -22,30 +22,46 @@ gcloud services enable \
   secretmanager.googleapis.com
 
 echo "==> Creating Artifact Registry repo"
-gcloud artifacts repositories create "${REPO}" \
-  --repository-format=docker \
-  --location="${REGION}" \
-  --description="CWFGW Docker images" \
-  2>/dev/null || echo "    (already exists)"
+if ! gcloud artifacts repositories describe "${REPO}" --location="${REGION}" &>/dev/null; then
+  gcloud artifacts repositories create "${REPO}" \
+    --repository-format=docker \
+    --location="${REGION}" \
+    --description="CWFGW Docker images"
+else
+  echo "    (already exists)"
+fi
 
-echo "==> Creating Cloud SQL instance (this takes a few minutes)"
-gcloud sql instances create "${SQL_INSTANCE}" \
-  --database-version=POSTGRES_16 \
-  --tier=db-f1-micro \
-  --region="${REGION}" \
-  --storage-auto-increase \
-  2>/dev/null || echo "    (already exists)"
+echo "==> Checking Cloud SQL instance"
+if ! gcloud sql instances describe "${SQL_INSTANCE}" &>/dev/null; then
+  echo "    Creating instance (this takes a few minutes)..."
+  gcloud sql instances create "${SQL_INSTANCE}" \
+    --database-version=POSTGRES_16 \
+    --tier=db-f1-micro \
+    --region="${REGION}" \
+    --storage-auto-increase
+else
+  echo "    Instance ${SQL_INSTANCE} already exists"
+fi
 
 echo "==> Creating database"
-gcloud sql databases create "${DB_NAME}" \
-  --instance="${SQL_INSTANCE}" \
-  2>/dev/null || echo "    (already exists)"
+if ! gcloud sql databases describe "${DB_NAME}" --instance="${SQL_INSTANCE}" &>/dev/null; then
+  gcloud sql databases create "${DB_NAME}" --instance="${SQL_INSTANCE}"
+else
+  echo "    (already exists)"
+fi
 
 echo "==> Setting database user password"
-DB_PASSWORD="$(openssl rand -base64 24)"
-gcloud sql users set-password "${DB_USER}" \
-  --instance="${SQL_INSTANCE}" \
-  --password="${DB_PASSWORD}"
+DB_PASSWORD="$(openssl rand -base64 18)Aa1!"
+if ! gcloud sql users describe "${DB_USER}" --instance="${SQL_INSTANCE}" &>/dev/null; then
+  echo "    Creating user ${DB_USER}"
+  gcloud sql users create "${DB_USER}" \
+    --instance="${SQL_INSTANCE}" \
+    --password="${DB_PASSWORD}"
+else
+  gcloud sql users set-password "${DB_USER}" \
+    --instance="${SQL_INSTANCE}" \
+    --password="${DB_PASSWORD}"
+fi
 
 echo "==> Storing password in Secret Manager"
 printf "%s" "${DB_PASSWORD}" | gcloud secrets create cwfgw-db-password \

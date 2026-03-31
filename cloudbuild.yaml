@@ -1,14 +1,10 @@
 steps:
-  # Build the fat jar
-  - name: 'gradle:8-jdk17'
-    args: ['gradle', 'shadowJar']
-
-  # Build the Docker image
+  # Build the Docker image (multi-stage: compiles jar + creates runtime image)
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-t'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/cwfgw:${SHORT_SHA}'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/cwfgw:${_TAG}'
       - '-t'
       - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/cwfgw:latest'
       - '.'
@@ -23,7 +19,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'cwfgw'
-      - '--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/cwfgw:${SHORT_SHA}'
+      - '--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/cwfgw:${_TAG}'
       - '--region=${_REGION}'
       - '--allow-unauthenticated'
       - '--add-cloudsql-instances=${PROJECT_ID}:${_REGION}:${_SQL_INSTANCE}'
@@ -34,11 +30,12 @@ steps:
       - '--max-instances=2'
 
 substitutions:
-  _REGION: us-central1
+  _REGION: us-west1
   _REPO: cwfgw
-  _SQL_INSTANCE: cwfgw-db
+  _SQL_INSTANCE: cwfgw-sandbox
   _DB_NAME: cwfgw
   _DB_USER: cwfgw
+  _TAG: latest
 
 options:
   logging: CLOUD_LOGGING_ONLY

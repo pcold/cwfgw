@@ -4,13 +4,7 @@
 .vscode
 .bsp
 .metals
-src
-gradle
+build
+deploy
 *.md
-gradlew
-gradlew.bat
-settings.gradle
-build.gradle
-gradle.properties
 docker-compose.yml
-!build/libs
