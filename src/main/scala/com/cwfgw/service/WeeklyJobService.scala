@@ -79,7 +79,9 @@ class WeeklyJobService(
           else
             val pipeline = for
               _ <- logger.info(s"Finalizing '${tournament.name}'...")
-              importResults <- espnImportService.importByDate(tournament.startDate)
+              importResults <- tournament.pgaTournamentId match
+                case Some(espnId) => espnImportService.importSingleEvent(tournament.startDate, espnId).map(List(_))
+                case None => espnImportService.importByDate(tournament.startDate)
               _ <- logger.info(s"Imported ${importResults.size} event(s), calculating scores...")
               _ <- scoringService.calculateScores(leagueId, tournamentId)
               _ <- scoringService.refreshStandings(leagueId)

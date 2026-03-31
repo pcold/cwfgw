@@ -28,7 +28,8 @@ case class CreateTournament(
     endDate: LocalDate,
     courseName: Option[String],
     purseAmount: Option[Long],
-    isMajor: Option[Boolean]
+    isMajor: Option[Boolean],
+    metadata: Option[Json] = None
 ) derives ConfiguredCodec
 
 case class UpdateTournament(

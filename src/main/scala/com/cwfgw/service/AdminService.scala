@@ -60,7 +60,8 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
           endDate = parsed.endDate,
           courseName = None,
           purseAmount = None,
-          isMajor = Some(parsed.isMajor)
+          isMajor = Some(parsed.isMajor),
+          metadata = Some(metadata)
         )
         TournamentRepository.create(req).transact(xa).map: tournament =>
           TournamentCreated(

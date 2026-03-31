@@ -46,13 +46,36 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
           importTournament(parsed)
     yield results
 
-  /** Import results for a specific tournament ID in our DB. */
+  /** Import results for a specific tournament ID in our DB.
+    * Only imports the single ESPN event matching this tournament's pga_tournament_id. */
   def importForTournament(tournamentId: UUID): IO[Either[String, List[EspnImportResult]]] =
-    val action = TournamentRepository.findById(tournamentId)
-    action.transact(xa).flatMap:
+    TournamentRepository.findById(tournamentId).transact(xa).flatMap:
       case None => IO.pure(Left("Tournament not found"))
       case Some(tournament) =>
-        importByDate(tournament.startDate).map(Right(_))
+        tournament.pgaTournamentId match
+          case Some(espnId) =>
+            importSingleEvent(tournament.startDate, espnId).map(r => Right(List(r)))
+          case None =>
+            // No ESPN ID linked — fall back to importing all events for the date
+            importByDate(tournament.startDate).map(Right(_))
+
+  /** Import results for a single ESPN event by its ESPN ID.
+    * Fetches the scoreboard for the date, filters to the matching event, and imports only that one. */
+  def importSingleEvent(date: LocalDate, espnEventId: String): IO[EspnImportResult] =
+    for
+      json <- espnClient.fetchScoreboard(date)
+      tournaments <- IO.fromEither(
+        espnClient.parseAllLeaderboards(json).left.map(e => new RuntimeException(e))
+      )
+      target <- IO.fromOption(tournaments.find(_.espnId == espnEventId))(
+        new RuntimeException(s"ESPN event $espnEventId not found on scoreboard for $date")
+      )
+      _ <- IO.raiseUnless(target.completed)(
+        new RuntimeException(s"ESPN event '${target.name}' ($espnEventId) is not yet completed")
+      )
+      _ <- logger.info(s"ESPN: importing single event ${target.name} ($espnEventId), ${target.competitors.size} competitors")
+      result <- importTournament(target)
+    yield result
 
   /** Preview live fantasy scoring from current ESPN leaderboard, without writing to DB.
     * Shows per-team earnings based on which rostered golfers are in the top 10. */

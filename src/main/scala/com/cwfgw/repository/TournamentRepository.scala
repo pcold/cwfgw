@@ -29,8 +29,8 @@ object TournamentRepository:
       .query[Tournament].option
 
   def create(req: CreateTournament): ConnectionIO[Tournament] =
-    sql"""INSERT INTO tournaments (pga_tournament_id, name, season_year, start_date, end_date, course_name, purse_amount, is_major)
-          VALUES (${req.pgaTournamentId}, ${req.name}, ${req.seasonYear}, ${req.startDate}, ${req.endDate}, ${req.courseName}, ${req.purseAmount}, ${req.isMajor.getOrElse(false)})
+    sql"""INSERT INTO tournaments (pga_tournament_id, name, season_year, start_date, end_date, course_name, purse_amount, is_major, metadata)
+          VALUES (${req.pgaTournamentId}, ${req.name}, ${req.seasonYear}, ${req.startDate}, ${req.endDate}, ${req.courseName}, ${req.purseAmount}, ${req.isMajor.getOrElse(false)}, ${req.metadata.getOrElse(Json.obj())})
           RETURNING $selectCols"""
       .query[Tournament].unique
 
