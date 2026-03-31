@@ -5,6 +5,8 @@ import org.http4s.*
 import org.http4s.dsl.io.*
 import org.http4s.circe.*
 import org.http4s.circe.CirceEntityCodec.*
+import io.circe.syntax.*
+import io.circe.Json
 import java.util.UUID
 import com.cwfgw.domain.*
 import com.cwfgw.service.TournamentService
@@ -39,3 +41,13 @@ object TournamentRoutes:
     case req @ POST -> Root / "api" / "v1" / "tournaments" / UUIDVar(id) / "results" =>
       req.as[List[CreateTournamentResult]].flatMap: body =>
         service.importResults(id, body).flatMap(Ok(_))
+
+    case POST -> Root / "api" / "v1" / "tournaments" / UUIDVar(id) / "finalize" =>
+      service.finalizeTournament(id).flatMap:
+        case Right(msg) => Ok(Json.obj("message" -> msg.asJson))
+        case Left(err) => BadRequest(Json.obj("error" -> err.asJson))
+
+    case POST -> Root / "api" / "v1" / "tournaments" / UUIDVar(id) / "reset" =>
+      service.resetTournament(id).flatMap:
+        case Right(msg) => Ok(Json.obj("message" -> msg.asJson))
+        case Left(err) => BadRequest(Json.obj("error" -> err.asJson))

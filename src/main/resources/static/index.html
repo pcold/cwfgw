@@ -1074,16 +1074,14 @@ TEAM 2 BURRELL
           if (!this.selectedTournament) return;
           this.finalizing = true;
           try {
-            const resp = await fetch(`/api/v1/espn/import/tournament/${this.selectedTournament}`, { method: 'POST' });
+            const resp = await fetch(`/api/v1/tournaments/${this.selectedTournament}/finalize`, { method: 'POST' });
+            const data = await resp.json();
             if (resp.ok) {
-              // Reload tournaments list (status changed) and scoreboard
               await this.loadTournaments();
-              this.selectedTournament = this.selectedTournament; // preserve selection
+              this.selectedTournament = this.selectedTournament;
               await this.loadScoreboard();
             } else {
-              const text = await resp.text();
-              try { const data = JSON.parse(text); alert('Finalize failed: ' + (data.error || text)); }
-              catch { alert('Finalize failed: ' + text); }
+              alert('Finalize failed: ' + (data.error || 'Unknown error'));
             }
           } catch (e) {
             alert('Finalize failed: ' + e.message);
@@ -1310,7 +1308,7 @@ TEAM 2 BURRELL
           this.resetMessage = '';
           this.resetError = false;
           try {
-            const resp = await fetch(`/api/v1/espn/reset/${this.resetTournamentId}`, { method: 'POST' });
+            const resp = await fetch(`/api/v1/tournaments/${this.resetTournamentId}/reset`, { method: 'POST' });
             const data = await resp.json();
             if (resp.ok) {
               this.resetMessage = data.message;

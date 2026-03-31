@@ -35,11 +35,11 @@ object Main extends IOApp:
         EspnClient.resource.use: espnClient =>
           val leagueService = LeagueService(xa)
           val golferService = GolferService(xa)
-          val tournamentService = TournamentService(xa)
           val teamService = TeamService(xa)
           val draftService = DraftService(xa)
           val scoringService = ScoringService(xa)
           val espnImportService = EspnImportService(espnClient, xa)
+          val tournamentService = TournamentService(espnImportService, scoringService, xa)
           val weeklyReportService = WeeklyReportService(espnImportService, xa)
           val adminService = AdminService(espnClient, xa)
           val allRoutes =
