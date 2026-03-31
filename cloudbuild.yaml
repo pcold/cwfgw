@@ -1,0 +1,44 @@
+steps:
+  # Build the fat jar
+  - name: 'gradle:8-jdk17'
+    args: ['gradle', 'shadowJar']
+
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/cwfgw:${SHORT_SHA}'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/cwfgw:latest'
+      - '.'
+
+  # Push the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/cwfgw']
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'cwfgw'
+      - '--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/cwfgw:${SHORT_SHA}'
+      - '--region=${_REGION}'
+      - '--allow-unauthenticated'
+      - '--add-cloudsql-instances=${PROJECT_ID}:${_REGION}:${_SQL_INSTANCE}'
+      - '--set-secrets=DATABASE_PASSWORD=cwfgw-db-password:latest'
+      - '--set-env-vars=DATABASE_URL=jdbc:postgresql:///${_DB_NAME}?cloudSqlInstance=${PROJECT_ID}:${_REGION}:${_SQL_INSTANCE}&socketFactory=com.google.cloud.sql.postgres.SocketFactory,DATABASE_USER=${_DB_USER}'
+      - '--memory=512Mi'
+      - '--min-instances=0'
+      - '--max-instances=2'
+
+substitutions:
+  _REGION: us-central1
+  _REPO: cwfgw
+  _SQL_INSTANCE: cwfgw-db
+  _DB_NAME: cwfgw
+  _DB_USER: cwfgw
+
+options:
+  logging: CLOUD_LOGGING_ONLY
