@@ -80,5 +80,5 @@ tasks.withType(ScalaCompile).configureEach {
 }
 
 test {
-    useJUnitPlatform()
+    // MUnit uses JUnit 4 runner via scalameta junit-interface
 }

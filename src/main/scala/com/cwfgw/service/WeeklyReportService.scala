@@ -502,7 +502,9 @@ class WeeklyReportService(espnImportService: EspnImportService, xa: Transactor[I
           val teamId = t.hcursor.downField("team_id").as[String].getOrElse("")
           val weeklyTopTens = t.hcursor.downField("_weekly_top_tens").as[BigDecimal].getOrElse(BigDecimal(0))
           val previous = t.hcursor.downField("_previous").as[BigDecimal].getOrElse(BigDecimal(0))
-          val sideBets = liveSideBetTotals.getOrElse(teamId, BigDecimal(0))
+          val originalSideBets = t.hcursor.downField("_side_bets").as[BigDecimal].getOrElse(BigDecimal(0))
+          val sideBets = if liveSideBetTotals.nonEmpty then liveSideBetTotals.getOrElse(teamId, BigDecimal(0))
+            else originalSideBets
           val topTenCount = t.hcursor.downField("_top_ten_count").as[Int].getOrElse(0)
           val weeklyTotal = weeklyTopTens * numTeams - totalPot
           val subtotal = previous + weeklyTotal

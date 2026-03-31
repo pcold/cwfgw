@@ -166,7 +166,7 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
   /** Match a roster name against ESPN athletes.
     * Strategy: aliases → exact last name → fuzzy last name (edit distance ≤ 2) → no match.
     * Multiple hits → narrow by first hint → ambiguous with suggestions. */
-  private def matchEspnPlayer(name: String, athletes: List[EspnAthlete]): MatchResult =
+  private[service] def matchEspnPlayer(name: String, athletes: List[EspnAthlete]): MatchResult =
     val normalized = stripDiacritics(name.trim.toUpperCase)
 
     // 0. Check hard-coded aliases first
@@ -224,10 +224,10 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
               case list if list.nonEmpty => MatchResult.Ambiguous(list.map(_._1).take(5))
               case _ => MatchResult.NoMatch
 
-  private def espnLastName(a: EspnAthlete): String =
+  private[service] def espnLastName(a: EspnAthlete): String =
     a.name.split("\\s+").lastOption.getOrElse(a.name)
 
-  private def narrowByFirstHint(matches: List[EspnAthlete], hint: Option[String]): MatchResult =
+  private[service] def narrowByFirstHint(matches: List[EspnAthlete], hint: Option[String]): MatchResult =
     matches match
       case Nil => MatchResult.NoMatch
       case one :: Nil => MatchResult.Exact(one)
@@ -245,7 +245,7 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
   /** Check if a hint matches an ESPN player's first name(s).
     * Handles: "C" matches "Cameron", "CAM" matches "Cameron",
     * "MW" matches "Min Woo", "KH" matches "K.H." */
-  private def firstNameMatches(a: EspnAthlete, hint: String): Boolean =
+  private[service] def firstNameMatches(a: EspnAthlete, hint: String): Boolean =
     val espnParts = stripDiacritics(a.name.toUpperCase).split("\\s+")
     val espnFirstParts = espnParts.init // everything except last name
     if espnFirstParts.isEmpty then return false
@@ -263,7 +263,7 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
     else false
 
   /** Levenshtein edit distance between two strings. */
-  private def editDistance(a: String, b: String): Int =
+  private[service] def editDistance(a: String, b: String): Int =
     val m = a.length
     val n = b.length
     val dp = Array.ofDim[Int](m + 1, n + 1)
@@ -278,14 +278,14 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
     dp(m)(n)
 
   /** Strip diacritics: ø→o, é→e, ñ→n, ü→u, etc. */
-  private def stripDiacritics(s: String): String =
+  private[service] def stripDiacritics(s: String): String =
     Normalizer.normalize(s, Normalizer.Form.NFD)
       .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
       .replace("ø", "o").replace("Ø", "O")  // ø doesn't decompose via NFD
       .replace("đ", "d").replace("Đ", "D")
       .replace("ł", "l").replace("Ł", "L")
 
-  private enum MatchResult:
+  private[service] enum MatchResult:
     case Exact(athlete: EspnAthlete)
     case Ambiguous(candidates: List[EspnAthlete])
     case NoMatch
@@ -332,7 +332,7 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
     espnClient.fetchCalendar
 
   /** Match a tournament name to an ESPN calendar entry using fuzzy matching. */
-  private def findEspnMatch(name: String, calendar: List[EspnCalendarEntry]): Option[EspnCalendarEntry] =
+  private[service] def findEspnMatch(name: String, calendar: List[EspnCalendarEntry]): Option[EspnCalendarEntry] =
     val normalized = normalize(name)
     // Try exact match first
     calendar.find(e => normalize(e.label) == normalized)
@@ -353,13 +353,13 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
             .headOption
             .map(_._1)
 
-  private def normalize(s: String): String =
+  private[service] def normalize(s: String): String =
     s.toLowerCase
       .replaceAll("[^a-z0-9\\s]", "")
       .replaceAll("\\s+", " ")
       .trim
 
-  private def wordOverlap(words: Set[String], target: String): Double =
+  private[service] def wordOverlap(words: Set[String], target: String): Double =
     val targetWords = target.split("\\s+").filter(_.length >= 3).toSet
     if words.isEmpty || targetWords.isEmpty then 0.0
     else words.intersect(targetWords).size.toDouble / words.size
