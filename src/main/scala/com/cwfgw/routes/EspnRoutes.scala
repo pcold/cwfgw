@@ -62,7 +62,7 @@ object EspnRoutes:
     .asJson
   )
 
-  def routes(service: EspnImportService, jobService: WeeklyJobService): HttpRoutes[IO] = HttpRoutes.of[IO]:
+  def routes(service: EspnImportService): HttpRoutes[IO] = HttpRoutes.of[IO]:
 
     // Live preview: GET /api/v1/espn/preview/:leagueId?date=2026-01-15
     case GET -> Root / "api" / "v1" / "espn" / "preview" / UUIDVar(leagueId) :? DateParam(date) =>
@@ -81,27 +81,6 @@ object EspnRoutes:
       service.importForTournament(tournamentId).flatMap:
         case Right(results) => Ok(Json.arr(results.map(resultToJson)*))
         case Left(err) => BadRequest(Json.obj("error" -> err.asJson))
-
-    // Finalize a tournament: POST /api/v1/espn/finalize/:tournamentId
-    case POST -> Root / "api" / "v1" / "espn" / "finalize" / UUIDVar(tournamentId) =>
-      jobService.finalizeTournament(tournamentId).flatMap:
-        case Right(msg) => Ok(Json.obj("message" -> msg.asJson))
-        case Left(err) => BadRequest(Json.obj("error" -> err.asJson))
-
-    // Reset a finalized tournament: POST /api/v1/espn/reset/:tournamentId
-    case POST -> Root / "api" / "v1" / "espn" / "reset" / UUIDVar(tournamentId) =>
-      jobService.resetTournament(tournamentId).flatMap:
-        case Right(msg) => Ok(Json.obj("message" -> msg.asJson))
-        case Left(err) => BadRequest(Json.obj("error" -> err.asJson))
-
-    // Manually trigger the weekly job: POST /api/v1/espn/process
-    case POST -> Root / "api" / "v1" / "espn" / "process" =>
-      jobService.processAll.flatMap: (completed, pending) =>
-        Ok(Json.obj(
-          "completed" -> completed.asJson,
-          "pending" -> pending.asJson
-        ))
-      .handleErrorWith(e => BadRequest(Json.obj("error" -> e.getMessage.asJson)))
 
     // ESPN season calendar: GET /api/v1/espn/calendar
     case GET -> Root / "api" / "v1" / "espn" / "calendar" =>

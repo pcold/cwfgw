@@ -42,8 +42,6 @@ object Main extends IOApp:
           val espnImportService = EspnImportService(espnClient, xa)
           val weeklyReportService = WeeklyReportService(espnImportService, xa)
           val adminService = AdminService(espnClient, xa)
-          val weeklyJobService = WeeklyJobService(espnImportService, scoringService, xa)
-
           val allRoutes =
             StaticRoutes.routes
               <+> HealthRoutes.routes
@@ -55,7 +53,7 @@ object Main extends IOApp:
               <+> DraftRoutes.routes(draftService)
               <+> ScoringRoutes.routes(scoringService)
               <+> ReportRoutes.routes(weeklyReportService)
-              <+> EspnRoutes.routes(espnImportService, weeklyJobService)
+              <+> EspnRoutes.routes(espnImportService)
 
           EmberServerBuilder
             .default[IO]
