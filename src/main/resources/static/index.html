@@ -28,6 +28,8 @@
                 class="px-3 py-1.5 rounded text-sm font-medium transition">Rankings</button>
         <button @click="page = 'sidebets'; loadReport()" :class="page === 'sidebets' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
                 class="px-3 py-1.5 rounded text-sm font-medium transition">Late Row Bets</button>
+        <button @click="page = 'rules'" :class="page === 'rules' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
+                class="px-3 py-1.5 rounded text-sm font-medium transition">Rules</button>
         <button @click="page = 'admin'" :class="page === 'admin' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
                 class="px-3 py-1.5 rounded text-sm font-medium transition">Admin</button>
       </div>
@@ -505,6 +507,95 @@
           </div>
         </div>
       </template>
+    </div>
+
+    <!-- RULES PAGE -->
+    <div x-show="page === 'rules'">
+      <h2 class="text-xl font-bold mb-6">League Rules</h2>
+
+      <!-- Draft -->
+      <div class="bg-gray-800 rounded-lg p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">The Draft</h3>
+        <ul class="text-gray-300 space-y-1 text-sm">
+          <li>13 teams, 8-round snake draft</li>
+          <li>Each team drafts 8 PGA Tour players</li>
+          <li>Players can be split between teams with ownership percentages (earnings divided proportionally)</li>
+        </ul>
+      </div>
+
+      <!-- Weekly Payouts -->
+      <div class="bg-gray-800 rounded-lg p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Weekly Payouts</h3>
+        <p class="text-gray-400 text-sm mb-3">Each PGA tournament, the top 10 finishers among all drafted players earn payouts:</p>
+        <table class="w-full max-w-xs text-sm">
+          <thead>
+            <tr class="text-gray-400 border-b border-gray-700">
+              <th class="text-left py-1">Position</th>
+              <th class="text-right py-1">Payout</th>
+            </tr>
+          </thead>
+          <tbody class="text-gray-300">
+            <tr><td class="py-0.5">1st</td><td class="text-right">$18</td></tr>
+            <tr><td class="py-0.5">2nd</td><td class="text-right">$12</td></tr>
+            <tr><td class="py-0.5">3rd</td><td class="text-right">$10</td></tr>
+            <tr><td class="py-0.5">4th</td><td class="text-right">$8</td></tr>
+            <tr><td class="py-0.5">5th</td><td class="text-right">$7</td></tr>
+            <tr><td class="py-0.5">6th</td><td class="text-right">$6</td></tr>
+            <tr><td class="py-0.5">7th</td><td class="text-right">$5</td></tr>
+            <tr><td class="py-0.5">8th</td><td class="text-right">$4</td></tr>
+            <tr><td class="py-0.5">9th</td><td class="text-right">$3</td></tr>
+            <tr><td class="py-0.5">10th</td><td class="text-right">$2</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Majors -->
+      <div class="bg-gray-800 rounded-lg p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Major Tournaments</h3>
+        <p class="text-gray-300 text-sm">All payouts are <span class="text-yellow-400 font-semibold">doubled</span> for the four majors and two additional premier events:</p>
+        <ul class="text-gray-300 text-sm mt-2 space-y-0.5 list-disc list-inside">
+          <li>The Masters</li>
+          <li>PGA Championship</li>
+          <li>U.S. Open</li>
+          <li>The Open Championship</li>
+          <li>The Players Championship</li>
+          <li>Tour Championship</li>
+        </ul>
+      </div>
+
+      <!-- Ties -->
+      <div class="bg-gray-800 rounded-lg p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Tie Handling</h3>
+        <ul class="text-gray-300 space-y-1 text-sm">
+          <li>Tied positions average the payouts across all tied slots</li>
+          <li>Example: T4 with 3 tied = ($8 + $7 + $6) / 3 = $7.00 each</li>
+          <li>Minimum payout of <span class="text-green-400 font-semibold">$1</span> per player for any tie that overlaps the top-10 zone</li>
+          <li>Example: T9 with 5 tied = max(avg($3, $2, $0, $0, $0), $1) = $1.00 each</li>
+        </ul>
+      </div>
+
+      <!-- Zero-Sum Scoring -->
+      <div class="bg-gray-800 rounded-lg p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Zero-Sum Scoring</h3>
+        <ul class="text-gray-300 space-y-1 text-sm">
+          <li>Each top-10 finish earns that payout from every other team</li>
+          <li>Formula: <code class="bg-gray-700 px-1 rounded">weekly +/- = (your top-10 earnings &times; 13) &minus; total pot</code></li>
+          <li>The league is zero-sum &mdash; every dollar won is a dollar lost by someone else</li>
+          <li>Undrafted players who finish top 10 are tracked but don't affect team payouts</li>
+        </ul>
+      </div>
+
+      <!-- Side Bets -->
+      <div class="bg-gray-800 rounded-lg p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Late Row Side Bets (Rounds 5&ndash;8)</h3>
+        <ul class="text-gray-300 space-y-1 text-sm">
+          <li>4 separate season-long races &mdash; one for each draft round (5, 6, 7, 8)</li>
+          <li>Winner = the team whose round-N pick has the highest cumulative earnings across all tournaments</li>
+          <li>Winner collects <span class="text-green-400 font-semibold">$15</span> from every other team ($15 &times; 12 = $180 gross)</li>
+          <li>Side bet is not active if all entries are at $0</li>
+        </ul>
+      </div>
+
     </div>
 
     <!-- ADMIN PAGE -->
