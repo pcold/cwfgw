@@ -159,6 +159,54 @@ class ScoringService(xa: Transactor[IO]):
     yield result
     action.transact(xa)
 
+  /** Pure: calculate a golfer's payout for a team given tournament results.
+    * Returns None if the golfer has no top-10 finish, or Some((basePayout, ownerPayout, breakdown)). */
+  private[service] def calculateGolferPayout(
+      position: Option[Int],
+      allResults: List[TournamentResult],
+      ownershipPct: BigDecimal,
+      isMajor: Boolean
+  ): Option[(BigDecimal, BigDecimal, Json)] =
+    position match
+      case None => None
+      case Some(pos) if pos > 10 => None
+      case Some(pos) =>
+        val numTied = allResults.count(_.position == Some(pos))
+        val basePayout = PayoutTable.tieSplitPayout(pos, numTied, isMajor)
+        val ownerPayout = basePayout * ownershipPct / BigDecimal(100)
+        val breakdown = Json.obj(
+          "position" -> pos.asJson,
+          "num_tied" -> numTied.asJson,
+          "base_payout" -> basePayout.asJson,
+          "ownership_pct" -> ownershipPct.asJson,
+          "payout" -> ownerPayout.asJson,
+          "is_major" -> isMajor.asJson
+        )
+        Some((basePayout, ownerPayout, breakdown))
+
+  /** Pure: compute zero-sum weekly totals from team earnings.
+    * Each team's weekly = (team_top_tens * num_teams) - total_pot. Sum across all teams is always 0. */
+  private[service] def zeroSumWeekly(teamEarnings: List[(UUID, BigDecimal)]): List[(UUID, BigDecimal)] =
+    val numTeams = teamEarnings.size
+    val totalPot = teamEarnings.map(_._2).sum
+    teamEarnings.map((teamId, topTens) => (teamId, topTens * numTeams - totalPot))
+
+  /** Pure: compute side bet P&L per team given a map of teamId -> cumulative earnings.
+    * Winner gets +$15*(N-1), losers get -$15. Ties split the winnings. */
+  private[service] def sideBetPnl(
+      teamEarnings: Map[UUID, BigDecimal],
+      sideBetAmount: BigDecimal = BigDecimal(15)
+  ): Map[UUID, BigDecimal] =
+    if teamEarnings.isEmpty || teamEarnings.values.forall(_ == BigDecimal(0)) then
+      teamEarnings.view.mapValues(_ => BigDecimal(0)).toMap
+    else
+      val maxEarnings = teamEarnings.values.max
+      val winners = teamEarnings.filter(_._2 == maxEarnings).keys.toSet
+      val numTeams = teamEarnings.size
+      val numWinners = winners.size
+      val winnerCollects = sideBetAmount * (numTeams - numWinners) / numWinners
+      teamEarnings.map((tid, _) => if winners.contains(tid) then tid -> winnerCollects else tid -> -sideBetAmount)
+
   def refreshStandings(leagueId: UUID): IO[List[LeagueStanding]] =
     val action = for
       teams <- TeamRepository.findByLeague(leagueId)

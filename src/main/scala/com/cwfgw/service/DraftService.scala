@@ -83,12 +83,19 @@ class DraftService(xa: Transactor[IO]):
         case (Some(draft), teams) if draft.status != "pending" =>
           FC.pure(Left("Draft picks can only be initialized when draft is pending"))
         case (Some(draft), teams) =>
-          val picks = for
-            round <- (1 to rounds).toList
-            (team, idx) <- (if round % 2 == 0 then teams.reverse else teams).zipWithIndex
-          yield (draft.id, team.id, round, (round - 1) * teams.size + idx + 1)
+          val picks = snakeDraftOrder(teams.map(_.id), rounds, draft.id)
           picks.traverse { case (draftId, teamId, roundNum, pickNum) =>
             DraftRepository.createPick(draftId, teamId, roundNum, pickNum)
           }.map(Right(_))
     yield result
     action.transact(xa)
+
+  /** Generate snake draft pick order: odd rounds go in team order,
+    * even rounds reverse. Returns (draftId, teamId, roundNum, pickNum). */
+  private[service] def snakeDraftOrder(
+      teamIds: List[UUID], rounds: Int, draftId: UUID
+  ): List[(UUID, UUID, Int, Int)] =
+    for
+      round <- (1 to rounds).toList
+      (teamId, idx) <- (if round % 2 == 0 then teamIds.reverse else teamIds).zipWithIndex
+    yield (draftId, teamId, round, (round - 1) * teamIds.size + idx + 1)

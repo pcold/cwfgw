@@ -259,34 +259,47 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
       .query[UUID].option.flatMap:
         case Some(id) => FC.pure(Some((id, false)))
         case None =>
-          // 2. Check by full name
-          val nameParts = competitor.name.split("\\s+", 2)
-          val (first, last) = if nameParts.length >= 2 then (nameParts(0), nameParts(1)) else ("", nameParts(0))
-
-          val byFullName = allGolfers.find: g =>
-            g.firstName.equalsIgnoreCase(first) && g.lastName.equalsIgnoreCase(last)
-
-          byFullName match
-            case Some(g) =>
-              // Store ESPN ID for future lookups
+          findGolferMatch(competitor.name, competitor.espnId, allGolfers) match
+            case GolferMatchResult.FullNameMatch(g) =>
               sql"UPDATE golfers SET pga_player_id = ${competitor.espnId} WHERE id = ${g.id} AND pga_player_id IS NULL"
                 .update.run.as(Some((g.id, false)))
-            case None =>
-              // 3. Check by last name only (if unique match)
-              val byLastName = allGolfers.filter(_.lastName.equalsIgnoreCase(last))
-              byLastName match
-                case g :: Nil =>
-                  sql"UPDATE golfers SET pga_player_id = ${competitor.espnId} WHERE id = ${g.id} AND pga_player_id IS NULL"
-                    .update.run.as(Some((g.id, false)))
-                case _ =>
-                  // 4. Auto-create the golfer
-                  GolferRepository.create(CreateGolfer(
-                    pgaPlayerId = Some(competitor.espnId),
-                    firstName = first,
-                    lastName = last,
-                    country = None,
-                    worldRanking = None
-                  )).map(g => Some((g.id, true)))
+            case GolferMatchResult.LastNameMatch(g) =>
+              sql"UPDATE golfers SET pga_player_id = ${competitor.espnId} WHERE id = ${g.id} AND pga_player_id IS NULL"
+                .update.run.as(Some((g.id, false)))
+            case GolferMatchResult.NoMatch(first, last) =>
+              GolferRepository.create(CreateGolfer(
+                pgaPlayerId = Some(competitor.espnId),
+                firstName = first,
+                lastName = last,
+                country = None,
+                worldRanking = None
+              )).map(g => Some((g.id, true)))
+
+/** Pure golfer matching result — no DB side effects. */
+private[service] enum GolferMatchResult:
+  case FullNameMatch(golfer: Golfer)
+  case LastNameMatch(golfer: Golfer)
+  case NoMatch(firstName: String, lastName: String)
+
+/** Pure: match a competitor name against a list of golfers.
+  * Strategy: exact full name → unique last name → no match. */
+private[service] def findGolferMatch(
+    competitorName: String, espnId: String, allGolfers: List[Golfer]
+): GolferMatchResult =
+  val nameParts = competitorName.split("\\s+", 2)
+  val (first, last) = if nameParts.length >= 2 then (nameParts(0), nameParts(1)) else ("", nameParts(0))
+
+  // 1. Exact full name match
+  val byFullName = allGolfers.find(g =>
+    g.firstName.equalsIgnoreCase(first) && g.lastName.equalsIgnoreCase(last))
+  byFullName match
+    case Some(g) => GolferMatchResult.FullNameMatch(g)
+    case None =>
+      // 2. Unique last name match
+      val byLastName = allGolfers.filter(_.lastName.equalsIgnoreCase(last))
+      byLastName match
+        case g :: Nil => GolferMatchResult.LastNameMatch(g)
+        case _ => GolferMatchResult.NoMatch(first, last)
 
 case class EspnImportResult(
     tournamentId: UUID,
