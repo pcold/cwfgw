@@ -17,7 +17,8 @@
   <nav class="bg-gray-800 border-b border-gray-700">
     <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
       <h1 class="text-lg font-bold text-green-400 tracking-wide">CWFG</h1>
-      <div class="flex gap-1">
+      <!-- Desktop nav -->
+      <div class="hidden md:flex gap-1">
         <button @click="page = 'scoreboard'" :class="page === 'scoreboard' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
                 class="px-3 py-1.5 rounded text-sm font-medium transition">Scoreboard</button>
         <button @click="page = 'standings'; loadReport()" :class="page === 'standings' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
@@ -33,6 +34,32 @@
         <button @click="page = 'admin'" :class="page === 'admin' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
                 class="px-3 py-1.5 rounded text-sm font-medium transition">Admin</button>
       </div>
+      <!-- Mobile hamburger -->
+      <button @click="mobileNav = !mobileNav" class="md:hidden text-gray-400 hover:text-white p-1">
+        <svg x-show="!mobileNav" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+        <svg x-show="mobileNav" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <!-- Mobile menu -->
+    <div x-show="mobileNav" x-transition class="md:hidden border-t border-gray-700 px-4 py-2 flex flex-col gap-1">
+      <button @click="page = 'scoreboard'; mobileNav = false" :class="page === 'scoreboard' ? 'bg-gray-700 text-white' : 'text-gray-400'"
+              class="px-3 py-2 rounded text-sm font-medium text-left">Scoreboard</button>
+      <button @click="page = 'standings'; loadReport(); mobileNav = false" :class="page === 'standings' ? 'bg-gray-700 text-white' : 'text-gray-400'"
+              class="px-3 py-2 rounded text-sm font-medium text-left">Weekly Report</button>
+      <button @click="page = 'rosters'; mobileNav = false" :class="page === 'rosters' ? 'bg-gray-700 text-white' : 'text-gray-400'"
+              class="px-3 py-2 rounded text-sm font-medium text-left">Rosters</button>
+      <button @click="page = 'rankings'; loadRankings(); mobileNav = false" :class="page === 'rankings' ? 'bg-gray-700 text-white' : 'text-gray-400'"
+              class="px-3 py-2 rounded text-sm font-medium text-left">Rankings</button>
+      <button @click="page = 'sidebets'; loadReport(); mobileNav = false" :class="page === 'sidebets' ? 'bg-gray-700 text-white' : 'text-gray-400'"
+              class="px-3 py-2 rounded text-sm font-medium text-left">Late Row Bets</button>
+      <button @click="page = 'rules'; mobileNav = false" :class="page === 'rules' ? 'bg-gray-700 text-white' : 'text-gray-400'"
+              class="px-3 py-2 rounded text-sm font-medium text-left">Rules</button>
+      <button @click="page = 'admin'; mobileNav = false" :class="page === 'admin' ? 'bg-gray-700 text-white' : 'text-gray-400'"
+              class="px-3 py-2 rounded text-sm font-medium text-left">Admin</button>
     </div>
   </nav>
 
@@ -68,8 +95,8 @@
       </div>
 
       <!-- Team scores -->
-      <div class="bg-gray-800 rounded-lg overflow-hidden" x-show="scoreboardData">
-        <table class="w-full text-sm">
+      <div class="bg-gray-800 rounded-lg overflow-x-auto" x-show="scoreboardData">
+        <table class="w-full text-sm min-w-[500px]">
           <thead class="bg-gray-700 text-gray-300 text-xs uppercase tracking-wider">
             <tr>
               <th class="px-4 py-3 text-left">#</th>
@@ -109,8 +136,8 @@
       <!-- Leaderboard -->
       <div class="mt-6" x-show="scoreboardData && scoreboardData.leaderboard">
         <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Leaderboard (Top 20)</h3>
-        <div class="bg-gray-800 rounded-lg overflow-hidden">
-          <table class="w-full text-sm">
+        <div class="bg-gray-800 rounded-lg overflow-x-auto">
+          <table class="w-full text-sm min-w-[400px]">
             <thead class="bg-gray-700 text-gray-300 text-xs uppercase tracking-wider">
               <tr>
                 <th class="px-4 py-2 text-left">Pos</th>
@@ -391,8 +418,8 @@
       <template x-if="rankings">
         <div>
           <!-- Rankings table -->
-          <div class="bg-gray-800 rounded-lg overflow-hidden mb-6">
-            <table class="w-full text-sm">
+          <div class="bg-gray-800 rounded-lg overflow-x-auto mb-6">
+            <table class="w-full text-sm min-w-[500px]">
               <thead class="bg-gray-700 text-gray-300 text-xs uppercase tracking-wider">
                 <tr>
                   <th class="px-4 py-3 text-left w-12">#</th>
@@ -928,6 +955,7 @@ TEAM 2 BURRELL
     function app() {
       return {
         page: 'standings',
+        mobileNav: false,
         tournaments: [],
         selectedTournament: null,
         scoreboardData: null,
