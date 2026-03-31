@@ -1074,15 +1074,16 @@ TEAM 2 BURRELL
           if (!this.selectedTournament) return;
           this.finalizing = true;
           try {
-            const resp = await fetch(`/api/v1/espn/finalize/${this.selectedTournament}`, { method: 'POST' });
-            const data = await resp.json();
+            const resp = await fetch(`/api/v1/espn/import/tournament/${this.selectedTournament}`, { method: 'POST' });
             if (resp.ok) {
               // Reload tournaments list (status changed) and scoreboard
               await this.loadTournaments();
               this.selectedTournament = this.selectedTournament; // preserve selection
               await this.loadScoreboard();
             } else {
-              alert('Finalize failed: ' + (data.error || 'Unknown error'));
+              const text = await resp.text();
+              try { const data = JSON.parse(text); alert('Finalize failed: ' + (data.error || text)); }
+              catch { alert('Finalize failed: ' + text); }
             }
           } catch (e) {
             alert('Finalize failed: ' + e.message);
