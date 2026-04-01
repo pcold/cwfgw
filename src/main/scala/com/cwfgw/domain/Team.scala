@@ -6,7 +6,7 @@ import java.time.Instant
 
 case class Team(
     id: UUID,
-    leagueId: UUID,
+    seasonId: UUID,
     ownerName: String,
     teamName: String,
     teamNumber: Option[Int],

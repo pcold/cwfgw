@@ -6,6 +6,7 @@ import cats.syntax.semigroupk.*
 import com.comcast.ip4s.*
 import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.server.Router
+import org.http4s.server.middleware.{Logger => Http4sLogger}
 import org.typelevel.log4cats.LoggerFactory
 import org.typelevel.log4cats.slf4j.Slf4jFactory
 import com.cwfgw.config.AppConfig
@@ -39,14 +40,16 @@ object Main extends IOApp:
       _ <- Database.transactor(config.database).use: xa =>
         EspnClient.resource.use: espnClient =>
           val leagueService = LeagueService(xa)
+          val seasonService = SeasonService(xa)
           val golferService = GolferService(xa)
           val teamService = TeamService(xa)
           val draftService = DraftService(xa)
           val scoringService = ScoringService(xa)
           val espnImportService =
             EspnImportService(espnClient, xa)
-          val tournamentService =
-            TournamentService(espnImportService, scoringService, xa)
+          val tournamentService = TournamentService(
+            espnImportService, scoringService, xa
+          )
           val weeklyReportService =
             WeeklyReportService(espnImportService, xa)
           val adminService = AdminService(espnClient, xa)
@@ -65,6 +68,7 @@ object Main extends IOApp:
               <+> AuthRoutes.routes(authService)
               <+> protectedRoutes
               <+> LeagueRoutes.routes(leagueService)
+              <+> SeasonRoutes.routes(seasonService)
               <+> GolferRoutes.routes(golferService)
               <+> TournamentRoutes.routes(tournamentService)
               <+> TeamRoutes.routes(teamService)
@@ -73,12 +77,17 @@ object Main extends IOApp:
               <+> ReportRoutes.routes(weeklyReportService)
               <+> EspnRoutes.routes(espnImportService)
 
+          val httpApp = Http4sLogger.httpApp(
+            logHeaders = false,
+            logBody = false
+          )(Router("/" -> allRoutes).orNotFound)
+
           authService.seedAdmin("admin", "AlsTheBoss") >>
             EmberServerBuilder
               .default[IO]
               .withHost(config.server.http4sHost)
               .withPort(config.server.http4sPort)
-              .withHttpApp(Router("/" -> allRoutes).orNotFound)
+              .withHttpApp(httpApp)
               .build
               .useForever
     yield ExitCode.Success

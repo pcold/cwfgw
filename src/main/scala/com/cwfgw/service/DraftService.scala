@@ -10,17 +10,17 @@ import com.cwfgw.repository.{DraftRepository, TeamRepository}
 
 class DraftService(xa: Transactor[IO]):
 
-  def get(leagueId: UUID): IO[Option[Draft]] =
-    DraftRepository.findByLeague(leagueId).transact(xa)
+  def get(seasonId: UUID): IO[Option[Draft]] =
+    DraftRepository.findBySeason(seasonId).transact(xa)
 
-  def create(leagueId: UUID, req: CreateDraft): IO[Draft] =
-    DraftRepository.create(leagueId, req).transact(xa)
+  def create(seasonId: UUID, req: CreateDraft): IO[Draft] =
+    DraftRepository.create(seasonId, req).transact(xa)
 
-  def start(leagueId: UUID): IO[Either[String, Draft]] =
+  def start(seasonId: UUID): IO[Either[String, Draft]] =
     val action = for
-      draftOpt <- DraftRepository.findByLeague(leagueId)
+      draftOpt <- DraftRepository.findBySeason(seasonId)
       result <- draftOpt match
-        case None => FC.pure(Left("No draft found for this league"))
+        case None => FC.pure(Left("No draft found for this season"))
         case Some(draft) if draft.status != "pending" =>
           FC.pure(Left(s"Draft is already ${draft.status}"))
         case Some(draft) =>
@@ -31,20 +31,20 @@ class DraftService(xa: Transactor[IO]):
     yield result
     action.transact(xa)
 
-  def getPicks(leagueId: UUID): IO[Either[String, List[DraftPick]]] =
+  def getPicks(seasonId: UUID): IO[Either[String, List[DraftPick]]] =
     val action = for
-      draftOpt <- DraftRepository.findByLeague(leagueId)
+      draftOpt <- DraftRepository.findBySeason(seasonId)
       result <- draftOpt match
-        case None => FC.pure(Left("No draft found for this league"))
+        case None => FC.pure(Left("No draft found for this season"))
         case Some(draft) => DraftRepository.getPicks(draft.id).map(Right(_))
     yield result
     action.transact(xa)
 
-  def makePick(leagueId: UUID, req: MakePick): IO[Either[String, DraftPick]] =
+  def makePick(seasonId: UUID, req: MakePick): IO[Either[String, DraftPick]] =
     val action = for
-      draftOpt <- DraftRepository.findByLeague(leagueId)
+      draftOpt <- DraftRepository.findBySeason(seasonId)
       result <- draftOpt match
-        case None => FC.pure(Left("No draft found for this league"))
+        case None => FC.pure(Left("No draft found for this season"))
         case Some(draft) if draft.status != "in_progress" =>
           FC.pure(Left("Draft is not in progress"))
         case Some(draft) =>
@@ -64,22 +64,22 @@ class DraftService(xa: Transactor[IO]):
     yield result
     action.transact(xa)
 
-  def getAvailableGolfers(leagueId: UUID): IO[Either[String, List[Golfer]]] =
+  def getAvailableGolfers(seasonId: UUID): IO[Either[String, List[Golfer]]] =
     val action = for
-      draftOpt <- DraftRepository.findByLeague(leagueId)
+      draftOpt <- DraftRepository.findBySeason(seasonId)
       result <- draftOpt match
-        case None => FC.pure(Left("No draft found for this league"))
+        case None => FC.pure(Left("No draft found for this season"))
         case Some(draft) => DraftRepository.getAvailableGolfers(draft.id).map(Right(_))
     yield result
     action.transact(xa)
 
-  def initializePicks(leagueId: UUID, rounds: Int): IO[Either[String, List[DraftPick]]] =
+  def initializePicks(seasonId: UUID, rounds: Int): IO[Either[String, List[DraftPick]]] =
     val action = for
-      draftOpt <- DraftRepository.findByLeague(leagueId)
-      teams <- TeamRepository.findByLeague(leagueId)
+      draftOpt <- DraftRepository.findBySeason(seasonId)
+      teams <- TeamRepository.findBySeason(seasonId)
       result <- (draftOpt, teams) match
-        case (None, _) => FC.pure(Left("No draft found for this league"))
-        case (_, Nil) => FC.pure(Left("No teams in this league"))
+        case (None, _) => FC.pure(Left("No draft found for this season"))
+        case (_, Nil) => FC.pure(Left("No teams in this season"))
         case (Some(draft), teams) if draft.status != "pending" =>
           FC.pure(Left("Draft picks can only be initialized when draft is pending"))
         case (Some(draft), teams) =>

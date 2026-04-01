@@ -17,6 +17,13 @@
   <nav class="bg-gray-800 border-b border-gray-700">
     <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
       <h1 class="text-lg font-bold text-green-400 tracking-wide">CWFG</h1>
+      <!-- Season selector -->
+      <select x-show="seasons.length > 1" x-model="currentSeasonId" @change="onSeasonChange()"
+              class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-xs font-mono ml-2">
+        <template x-for="s in seasons" :key="s.id">
+          <option :value="s.id" x-text="seasonLabel(s)"></option>
+        </template>
+      </select>
       <!-- Desktop nav -->
       <div class="hidden md:flex gap-1">
         <button @click="page = 'scoreboard'" :class="page === 'scoreboard' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
@@ -633,21 +640,46 @@
     <div x-show="page === 'admin'">
       <h2 class="text-xl font-bold mb-4">Admin</h2>
 
-      <!-- Upload Season Schedule -->
+      <!-- Create League -->
       <div class="bg-gray-800 rounded-lg p-6 mb-6">
-        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Upload Season Schedule</h3>
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Create League</h3>
+        <div class="flex items-center gap-4">
+          <input type="text" x-model="newLeagueName" placeholder="e.g. Castlewood Fantasy Golf"
+                 class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-72">
+          <button @click="createLeague()" :disabled="!newLeagueName.trim() || creatingLeague"
+                  class="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded text-sm font-medium transition">
+            <span x-show="!creatingLeague">Create League</span>
+            <span x-show="creatingLeague">Creating...</span>
+          </button>
+          <span x-show="leagueError" class="text-red-400 text-sm" x-text="leagueError"></span>
+          <span x-show="leagueSuccess" class="text-green-400 text-sm" x-text="leagueSuccess"></span>
+        </div>
+      </div>
 
-        <div class="flex gap-4 mb-4">
+      <!-- Create Season -->
+      <div class="bg-gray-800 rounded-lg p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Create Season</h3>
+
+        <div class="flex flex-wrap gap-4 mb-4">
           <div>
-            <label class="block text-xs text-gray-400 mb-1">League ID</label>
-            <input type="text" x-model="adminLeagueId"
-                   class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-80 font-mono"
-                   placeholder="11111111-1111-1111-1111-111111111111">
+            <label class="block text-xs text-gray-400 mb-1">League</label>
+            <select x-model="adminLeagueId"
+                    class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-64">
+              <template x-for="lg in leagues" :key="lg.id">
+                <option :value="lg.id" x-text="lg.name"></option>
+              </template>
+            </select>
           </div>
           <div>
-            <label class="block text-xs text-gray-400 mb-1">Season Year</label>
+            <label class="block text-xs text-gray-400 mb-1">Year</label>
             <input type="number" x-model.number="adminSeasonYear"
                    class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-24">
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Season Name</label>
+            <input type="text" x-model="adminSeasonName"
+                   placeholder="e.g. 2026 Spring"
+                   class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-48">
           </div>
         </div>
 
@@ -662,19 +694,19 @@
         </div>
 
         <div class="flex items-center gap-4">
-          <button @click="uploadSeason()"
-                  :disabled="adminUploading || !adminScheduleText.trim()"
+          <button @click="createSeason()"
+                  :disabled="adminUploading || !adminScheduleText.trim() || !adminSeasonName.trim() || !adminLeagueId"
                   class="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded text-sm font-medium transition">
-            <span x-show="!adminUploading">Upload &amp; Validate with ESPN</span>
-            <span x-show="adminUploading">Uploading...</span>
+            <span x-show="!adminUploading">Create &amp; Validate with ESPN</span>
+            <span x-show="adminUploading">Creating...</span>
           </button>
           <span x-show="adminError" class="text-red-400 text-sm" x-text="adminError"></span>
         </div>
       </div>
 
-      <!-- Upload Result (Season) -->
+      <!-- Season Create Result -->
       <div class="bg-gray-800 rounded-lg p-6 mb-6" x-show="adminResult">
-        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Upload Result</h3>
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Season Created</h3>
 
         <div class="flex gap-6 mb-4 text-sm">
           <div>
@@ -737,6 +769,28 @@
 
         <!-- Step 1: Paste roster text -->
         <div x-show="!rosterPreview">
+          <div class="flex flex-wrap gap-4 mb-4">
+            <div>
+              <label class="block text-xs text-gray-400 mb-1">League</label>
+              <select x-model="rosterLeagueId" @change="rosterSeasonId = null"
+                      class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-64">
+                <template x-for="lg in leagues" :key="lg.id">
+                  <option :value="lg.id" x-text="lg.name"></option>
+                </template>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-400 mb-1">Season</label>
+              <select x-model="rosterSeasonId"
+                      class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-64">
+                <option value="" disabled>Select a season</option>
+                <template x-for="s in seasons" :key="s.id">
+                  <option :value="s.id" x-text="seasonLabel(s)"></option>
+                </template>
+              </select>
+            </div>
+          </div>
+
           <div class="mb-4">
             <label class="block text-xs text-gray-400 mb-1">Roster (paste text — TEAM headers + round/player lines)</label>
             <textarea x-model="rosterText" rows="20"
@@ -755,7 +809,7 @@ TEAM 2 BURRELL
 
           <div class="flex items-center gap-4">
             <button @click="previewRoster()"
-                    :disabled="rosterUploading || !rosterText.trim()"
+                    :disabled="rosterUploading || !rosterText.trim() || !rosterSeasonId"
                     class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded text-sm font-medium transition">
               <span x-show="!rosterUploading">Match Players with ESPN</span>
               <span x-show="rosterUploading">Matching...</span>
@@ -851,11 +905,33 @@ TEAM 2 BURRELL
         <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Reset Tournament Results</h3>
         <p class="text-xs text-gray-400 mb-4">Delete all scores and results for a finalized tournament, resetting it back to upcoming status.</p>
 
+        <div class="flex flex-wrap gap-4 mb-4">
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">League</label>
+            <select x-model="resetLeagueId" @change="resetSeasonId = null; resetTournaments = []; resetTournamentId = ''"
+                    class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-64">
+              <template x-for="lg in leagues" :key="lg.id">
+                <option :value="lg.id" x-text="lg.name"></option>
+              </template>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Season</label>
+            <select x-model="resetSeasonId" @change="loadResetTournaments()"
+                    class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-64">
+              <option value="" disabled>Select a season</option>
+              <template x-for="s in seasons" :key="s.id">
+                <option :value="s.id" x-text="seasonLabel(s)"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+
         <div class="flex items-center gap-4">
           <select x-model="resetTournamentId"
                   class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-80">
             <option value="">-- select completed tournament --</option>
-            <template x-for="t in tournaments.filter(t => t.status === 'completed')" :key="t.id">
+            <template x-for="t in resetTournaments.filter(t => t.status === 'completed')" :key="t.id">
               <option :value="t.id" x-text="'Wk ' + (t.metadata?.week || '?') + ' — ' + t.name"></option>
             </template>
           </select>
@@ -991,8 +1067,6 @@ TEAM 2 BURRELL
   </div>
 
   <script>
-    const LEAGUE_ID = '11111111-1111-1111-1111-111111111111';
-
     function fmtMoney(val) {
       const n = Number(val);
       if (n === 0) return '$0';
@@ -1004,6 +1078,8 @@ TEAM 2 BURRELL
       return {
         page: 'standings',
         mobileNav: false,
+        seasons: [],
+        currentSeasonId: null,
         authenticated: false,
         loginUsername: '',
         loginPassword: '',
@@ -1028,14 +1104,23 @@ TEAM 2 BURRELL
         reportLoading: false,
 
         // Admin state
-        adminLeagueId: LEAGUE_ID,
+        leagues: [],
+        newLeagueName: '',
+        creatingLeague: false,
+        leagueError: '',
+        leagueSuccess: '',
+        adminLeagueId: null,
         adminSeasonYear: new Date().getFullYear(),
+        adminSeasonName: '',
         adminScheduleText: '',
         adminUploading: false,
         adminResult: null,
         adminError: '',
 
         // Reset tournament state
+        resetLeagueId: null,
+        resetSeasonId: null,
+        resetTournaments: [],
         resetTournamentId: '',
         resettingTournament: false,
         resetMessage: '',
@@ -1047,6 +1132,8 @@ TEAM 2 BURRELL
         sharedPlayers: [],
 
         // Roster upload state (two-step)
+        rosterLeagueId: null,
+        rosterSeasonId: null,
         rosterText: '',
         rosterUploading: false,
         rosterPreview: null,
@@ -1055,6 +1142,10 @@ TEAM 2 BURRELL
         rosterError: '',
 
         fmtMoney,
+
+        seasonLabel(s) {
+          return s.season_year + ' ' + s.name;
+        },
 
         async checkAuth() {
           try {
@@ -1104,9 +1195,79 @@ TEAM 2 BURRELL
 
         async init() {
           await this.checkAuth();
+          await this.loadLeagues();
+          await this.loadSeasons();
+          if (!this.currentSeasonId) return;
           await this.loadTournaments();
+          this.autoSelectTournament();
+        },
 
-          // Auto-select the most recent completed or in-progress tournament
+        async loadLeagues() {
+          const resp = await fetch('/api/v1/leagues');
+          console.log('[loadLeagues] status:', resp.status);
+          if (resp.ok) {
+            this.leagues = await resp.json();
+            console.log('[loadLeagues] loaded:', this.leagues.length, 'leagues', JSON.stringify(this.leagues));
+            if (this.leagues.length > 0) {
+              this.adminLeagueId = this.leagues[0].id;
+              this.rosterLeagueId = this.leagues[0].id;
+              this.resetLeagueId = this.leagues[0].id;
+            }
+          } else {
+            console.log('[loadLeagues] error:', resp.status, await resp.text());
+          }
+        },
+
+        async createLeague() {
+          this.creatingLeague = true;
+          this.leagueError = '';
+          this.leagueSuccess = '';
+          try {
+            const resp = await fetch('/api/v1/leagues', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: this.newLeagueName.trim() })
+            });
+            if (resp.ok) {
+              const league = await resp.json();
+              this.leagueSuccess = `Created "${league.name}"`;
+              this.newLeagueName = '';
+              await this.loadLeagues();
+            } else {
+              const data = await resp.json();
+              this.leagueError = data.error || 'Failed to create league';
+            }
+          } catch (e) {
+            this.leagueError = e.message;
+          }
+          this.creatingLeague = false;
+        },
+
+        async loadSeasons() {
+          const resp = await fetch('/api/v1/seasons');
+          console.log('[loadSeasons] status:', resp.status);
+          if (resp.ok) {
+            this.seasons = await resp.json();
+            console.log('[loadSeasons] loaded:', this.seasons.length, 'seasons', JSON.stringify(this.seasons));
+            // Default to most recent active season
+            const active = this.seasons.find(s => s.status === 'active')
+              || this.seasons[0];
+            if (active) this.currentSeasonId = active.id;
+          } else {
+            console.log('[loadSeasons] error:', resp.status, await resp.text());
+          }
+        },
+
+        async onSeasonChange() {
+          this.report = null;
+          this.rankings = null;
+          this.scoreboardData = null;
+          this.rosterTeams = [];
+          await this.loadTournaments();
+          this.autoSelectTournament();
+        },
+
+        autoSelectTournament() {
           const current = this.tournaments.find(t => t.status === 'in_progress')
             || this.tournaments.find(t => t.status === 'completed')
             || this.tournaments[0];
@@ -1119,7 +1280,8 @@ TEAM 2 BURRELL
         },
 
         async loadTournaments() {
-          const resp = await fetch(`/api/v1/tournaments?season=2026`);
+          if (!this.currentSeasonId) return;
+          const resp = await fetch(`/api/v1/tournaments?season_id=${this.currentSeasonId}`);
           const data = await resp.json();
           this.tournaments = data.sort((a, b) => b.start_date.localeCompare(a.start_date));
         },
@@ -1135,7 +1297,7 @@ TEAM 2 BURRELL
 
           if (tournament.status === 'completed') {
             // Use persisted report data for completed tournaments
-            const resp = await fetch(`/api/v1/leagues/${LEAGUE_ID}/report/${this.selectedTournament}`);
+            const resp = await fetch(`/api/v1/seasons/${this.currentSeasonId}/report/${this.selectedTournament}`);
             if (resp.ok) {
               const data = await resp.json();
               // Transform report teams into scoreboard format
@@ -1186,7 +1348,7 @@ TEAM 2 BURRELL
               this.scoreboardTeams = teams.sort((a, b) => b.weekly_total - a.weekly_total);
             }
           } else {
-            const resp = await fetch(`/api/v1/espn/preview/${LEAGUE_ID}?date=${tournament.start_date}`);
+            const resp = await fetch(`/api/v1/espn/preview/${this.currentSeasonId}?date=${tournament.start_date}`);
             if (resp.ok) {
               const data = await resp.json();
               const event = data.find(e => e.espn_id === tournament.pga_tournament_id) || data[0];
@@ -1231,7 +1393,7 @@ TEAM 2 BURRELL
           if (!golferId) return;
           this.golferModalLoading = true;
           this.golferModal = { golfer_name: 'Loading...', results: [], top_tens: 0, total_earnings: 0 };
-          const resp = await fetch(`/api/v1/leagues/${LEAGUE_ID}/golfer/${golferId}/history`);
+          const resp = await fetch(`/api/v1/seasons/${this.currentSeasonId}/golfer/${golferId}/history`);
           if (resp.ok) {
             this.golferModal = await resp.json();
           }
@@ -1241,7 +1403,7 @@ TEAM 2 BURRELL
         async loadRankings() {
           this.rankingsLoading = true;
           const liveParam = this.rankingsLive ? '?live=true' : '';
-          const resp = await fetch(`/api/v1/leagues/${LEAGUE_ID}/rankings${liveParam}`);
+          const resp = await fetch(`/api/v1/seasons/${this.currentSeasonId}/rankings${liveParam}`);
           if (resp.ok) {
             this.rankings = await resp.json();
             this.$nextTick(() => this.renderRankingsChart());
@@ -1307,7 +1469,7 @@ TEAM 2 BURRELL
 
         async loadRosters() {
           this.rostersLoading = true;
-          const resp = await fetch(`/api/v1/leagues/${LEAGUE_ID}/rosters`);
+          const resp = await fetch(`/api/v1/seasons/${this.currentSeasonId}/rosters`);
           if (resp.ok) {
             this.rosterTeams = await resp.json();
             // Find shared players (appear on multiple teams with < 100% ownership)
@@ -1327,28 +1489,52 @@ TEAM 2 BURRELL
           this.rostersLoading = false;
         },
 
-        async uploadSeason() {
+        async createSeason() {
           this.adminUploading = true;
           this.adminError = '';
           this.adminResult = null;
 
           try {
-            const resp = await fetch('/api/v1/admin/season', {
+            // Step 1: create the season
+            const createResp = await fetch('/api/v1/seasons', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 league_id: this.adminLeagueId,
+                name: this.adminSeasonName.trim(),
+                season_year: this.adminSeasonYear
+              })
+            });
+            if (!createResp.ok) {
+              const err = await createResp.json();
+              this.adminError = err.error || 'Failed to create season';
+              this.adminUploading = false;
+              return;
+            }
+            const season = await createResp.json();
+
+            // Step 2: upload schedule to the new season
+            const uploadResp = await fetch('/api/v1/admin/season', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                season_id: season.id,
                 season_year: this.adminSeasonYear,
                 schedule: this.adminScheduleText
               })
             });
-            const data = await resp.json();
-            if (resp.ok) {
+            const data = await uploadResp.json();
+            if (uploadResp.ok) {
               this.adminResult = data;
-              // Reload tournaments list
+              this.rosterLeagueId = this.adminLeagueId;
+              this.resetLeagueId = this.adminLeagueId;
+              await this.loadSeasons();
+              this.currentSeasonId = season.id;
+              this.rosterSeasonId = season.id;
               await this.loadTournaments();
+              this.autoSelectTournament();
             } else {
-              this.adminError = data.error || 'Upload failed';
+              this.adminError = data.error || 'Schedule upload failed';
             }
           } catch (e) {
             this.adminError = e.message;
@@ -1420,7 +1606,7 @@ TEAM 2 BURRELL
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                league_id: this.adminLeagueId,
+                season_id: this.rosterSeasonId,
                 teams: teams
               })
             });
@@ -1437,9 +1623,24 @@ TEAM 2 BURRELL
           this.rosterConfirming = false;
         },
 
+        async loadResetTournaments() {
+          if (!this.resetSeasonId) {
+            this.resetTournaments = [];
+            this.resetTournamentId = '';
+            return;
+          }
+          const resp = await fetch(
+            `/api/v1/tournaments?season_id=${this.resetSeasonId}`
+          );
+          if (resp.ok) {
+            this.resetTournaments = await resp.json();
+          }
+          this.resetTournamentId = '';
+        },
+
         async resetTournament() {
           if (!this.resetTournamentId) return;
-          const tournament = this.tournaments.find(t => t.id === this.resetTournamentId);
+          const tournament = this.resetTournaments.find(t => t.id === this.resetTournamentId);
           const name = tournament ? tournament.name : this.resetTournamentId;
           if (!confirm(`Are you sure you want to reset "${name}"?\n\nThis will delete all scores and results for this tournament and set it back to upcoming.`)) return;
           this.resettingTournament = true;
@@ -1452,6 +1653,7 @@ TEAM 2 BURRELL
               this.resetMessage = data.message;
               this.resetError = false;
               this.resetTournamentId = '';
+              await this.loadResetTournaments();
               await this.loadTournaments();
             } else {
               this.resetMessage = data.error || 'Reset failed';
@@ -1470,7 +1672,7 @@ TEAM 2 BURRELL
           this.report = null;
 
           const liveParam = this.reportLive ? '?live=true' : '';
-          const resp = await fetch(`/api/v1/leagues/${LEAGUE_ID}/report/${this.reportTournament}${liveParam}`);
+          const resp = await fetch(`/api/v1/seasons/${this.currentSeasonId}/report/${this.reportTournament}${liveParam}`);
           if (resp.ok) {
             this.report = await resp.json();
           }

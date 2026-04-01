@@ -25,20 +25,20 @@ import com.cwfgw.repository.{GolferRepository, ScoreRepository, TeamRepository, 
   * tournaments to show projected standings. */
 class WeeklyReportService(espnImportService: EspnImportService, xa: Transactor[IO]):
 
-  def getReport(leagueId: UUID, tournamentId: UUID, live: Boolean = false): IO[Json] =
+  def getReport(seasonId: UUID, tournamentId: UUID, live: Boolean = false): IO[Json] =
     val action = for
-      teams <- TeamRepository.findByLeague(leagueId)
+      teams <- TeamRepository.findBySeason(seasonId)
       tournament <- TournamentRepository.findById(tournamentId)
       results <- TournamentRepository.findResults(tournamentId)
       allGolfers <- GolferRepository.findAll(activeOnly = false, search = None)
-      scores <- ScoreRepository.getScores(leagueId, tournamentId)
-      standings <- ScoreRepository.getStandings(leagueId)
-      allTournaments <- TournamentRepository.findAll(seasonYear = tournament.map(_.seasonYear), status = Some("completed"))
+      scores <- ScoreRepository.getScores(seasonId, tournamentId)
+      standings <- ScoreRepository.getStandings(seasonId)
+      allTournaments <- TournamentRepository.findAll(seasonId = tournament.map(_.seasonId), status = Some("completed"))
 
       // Get all rosters and all scores across all tournaments for cumulative data
-      allRosters <- TeamRepository.getRosterByLeague(leagueId)
+      allRosters <- TeamRepository.getRosterBySeason(seasonId)
       allScores <- allTournaments.flatTraverse: t =>
-        ScoreRepository.getScores(leagueId, t.id)
+        ScoreRepository.getScores(seasonId, t.id)
 
       // Side bet data: cumulative earnings per team per round 5-8
       // For each round, find all tournament results for each team's round-N pick
@@ -48,7 +48,7 @@ class WeeklyReportService(espnImportService: EspnImportService, xa: Transactor[I
           // Sum all tournament payouts for this golfer across all completed tournaments
           sql"""SELECT COALESCE(SUM(fs.points), 0)
                 FROM fantasy_scores fs
-                WHERE fs.league_id = $leagueId AND fs.team_id = ${entry.teamId} AND fs.golfer_id = ${entry.golferId}"""
+                WHERE fs.season_id = $seasonId AND fs.team_id = ${entry.teamId} AND fs.golfer_id = ${entry.golferId}"""
             .query[BigDecimal].unique.map(total => (entry.teamId, total * entry.ownershipPct / 100))
         .map: entries =>
           (round, entries.map((tid, amt) => tid -> amt).toMap)
@@ -232,16 +232,16 @@ class WeeklyReportService(espnImportService: EspnImportService, xa: Transactor[I
         val startDate = baseReport.hcursor.downField("tournament").downField("start_date").as[String].getOrElse("")
         if startDate.isEmpty then IO.pure(baseReport)
         else
-          espnImportService.previewByDate(leagueId, LocalDate.parse(startDate)).map: previews =>
+          espnImportService.previewByDate(seasonId, LocalDate.parse(startDate)).map: previews =>
             mergeLiveData(baseReport, previews)
           .handleError(_ => baseReport) // fall back to base report if ESPN fails
       else IO.pure(baseReport)
 
   /** Get a golfer's season top-10 history: tournament, position, earnings. */
-  def getGolferHistory(leagueId: UUID, golferId: UUID): IO[Json] =
+  def getGolferHistory(seasonId: UUID, golferId: UUID): IO[Json] =
     val action = for
       golfer <- GolferRepository.findById(golferId)
-      scores <- ScoreRepository.getGolferSeasonScores(leagueId, golferId)
+      scores <- ScoreRepository.getGolferSeasonScores(seasonId, golferId)
     yield
       val name = golfer.map(g => s"${g.firstName} ${g.lastName}").getOrElse("Unknown")
       val totalEarnings = scores.map(_._3).sum
@@ -261,12 +261,12 @@ class WeeklyReportService(espnImportService: EspnImportService, xa: Transactor[I
     action.transact(xa)
 
   /** Rankings with historical cumulative totals per team across all tournaments. */
-  def getRankings(leagueId: UUID, live: Boolean = false): IO[Json] =
+  def getRankings(seasonId: UUID, live: Boolean = false): IO[Json] =
     val action = for
-      teams <- TeamRepository.findByLeague(leagueId)
-      allTournaments <- TournamentRepository.findAll(seasonYear = None, status = Some("completed"))
-      allRosters <- TeamRepository.getRosterByLeague(leagueId)
-      allScores <- allTournaments.flatTraverse(t => ScoreRepository.getScores(leagueId, t.id))
+      teams <- TeamRepository.findBySeason(seasonId)
+      allTournaments <- TournamentRepository.findAll(seasonId = None, status = Some("completed"))
+      allRosters <- TeamRepository.getRosterBySeason(seasonId)
+      allScores <- allTournaments.flatTraverse(t => ScoreRepository.getScores(seasonId, t.id))
 
       // Side bet cumulative per round for final totals
       sideBetCumulative <- (5 to 8).toList.traverse: round =>
@@ -274,14 +274,14 @@ class WeeklyReportService(espnImportService: EspnImportService, xa: Transactor[I
         roundPicks.traverse: entry =>
           sql"""SELECT COALESCE(SUM(fs.points), 0)
                 FROM fantasy_scores fs
-                WHERE fs.league_id = $leagueId AND fs.team_id = ${entry.teamId} AND fs.golfer_id = ${entry.golferId}"""
+                WHERE fs.season_id = $seasonId AND fs.team_id = ${entry.teamId} AND fs.golfer_id = ${entry.golferId}"""
             .query[BigDecimal].unique.map(total => (entry.teamId, total * entry.ownershipPct / 100))
         .map(entries => (round, entries.map((tid, amt) => tid -> amt).toMap))
 
       // Find in-progress tournaments for live view
-      inProgressTournaments <- TournamentRepository.findAll(seasonYear = None, status = Some("upcoming"))
+      inProgressTournaments <- TournamentRepository.findAll(seasonId = None, status = Some("upcoming"))
         .map(_ ++ allTournaments) // include completed for the query
-      upcomingAndInProgress <- TournamentRepository.findAll(seasonYear = None, status = Some("in_progress"))
+      upcomingAndInProgress <- TournamentRepository.findAll(seasonId = None, status = Some("in_progress"))
     yield
       val numTeams = teams.size
       val sideBetPerTeam = BigDecimal(15)
@@ -346,7 +346,7 @@ class WeeklyReportService(espnImportService: EspnImportService, xa: Transactor[I
         val tournament = liveCandidate.get
         val teams = baseRankings.hcursor.downField("teams").as[List[Json]].getOrElse(Nil)
         val numTeams = teams.size
-        espnImportService.previewByDate(leagueId, tournament.startDate).map: previews =>
+        espnImportService.previewByDate(seasonId, tournament.startDate).map: previews =>
           previews.headOption match
             case None => baseRankings
             case Some(preview) =>

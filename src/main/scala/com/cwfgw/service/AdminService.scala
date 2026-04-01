@@ -25,7 +25,7 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
 
   /** Parse and validate a season schedule, then persist to DB.
     * Returns a summary of what was created and any ESPN match results. */
-  def uploadSeason(leagueId: UUID, seasonYear: Int, scheduleText: String): IO[SeasonUploadResult] =
+  def uploadSeason(seasonId: UUID, seasonYear: Int, scheduleText: String): IO[SeasonUploadResult] =
     for
       parsed <- IO.fromEither(
         SeasonParser.parse(scheduleText, seasonYear).left.map(e => new RuntimeException(s"Parse error:\n$e"))
@@ -55,7 +55,7 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
         val req = CreateTournament(
           pgaTournamentId = espnMatch.map(_.id),
           name = parsed.name,
-          seasonYear = seasonYear,
+          seasonId = seasonId,
           startDate = parsed.startDate,
           endDate = parsed.endDate,
           courseName = None,
@@ -117,11 +117,11 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
 
   /** Step 2: Confirm and persist rosters. Each pick includes the resolved ESPN ID
     * (either from the auto-match or user selection). */
-  def confirmRoster(leagueId: UUID, confirmed: List[ConfirmedTeam]): IO[RosterUploadResult] =
+  def confirmRoster(seasonId: UUID, confirmed: List[ConfirmedTeam]): IO[RosterUploadResult] =
     for
       results <- confirmed.traverse: team =>
         for
-          created <- TeamRepository.create(leagueId, CreateTeam(
+          created <- TeamRepository.create(seasonId, CreateTeam(
             ownerName = team.teamName,
             teamName = team.teamName,
             teamNumber = Some(team.teamNumber)

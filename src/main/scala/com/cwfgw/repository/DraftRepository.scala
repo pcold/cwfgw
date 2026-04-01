@@ -11,18 +11,18 @@ import com.cwfgw.domain.*
 object DraftRepository:
 
   private val selectDraftCols =
-    fr"id, league_id, status, draft_type, settings, started_at, completed_at, created_at"
+    fr"id, season_id, status, draft_type, settings, started_at, completed_at, created_at"
 
   private val selectPickCols =
     fr"id, draft_id, team_id, golfer_id, round_num, pick_num, picked_at"
 
-  def findByLeague(leagueId: UUID): ConnectionIO[Option[Draft]] =
-    (fr"SELECT" ++ selectDraftCols ++ fr"FROM drafts WHERE league_id = $leagueId")
+  def findBySeason(seasonId: UUID): ConnectionIO[Option[Draft]] =
+    (fr"SELECT" ++ selectDraftCols ++ fr"FROM drafts WHERE season_id = $seasonId")
       .query[Draft].option
 
-  def create(leagueId: UUID, req: CreateDraft): ConnectionIO[Draft] =
-    sql"""INSERT INTO drafts (league_id, draft_type, settings)
-          VALUES ($leagueId, ${req.draftType.getOrElse("snake")}, ${req.settings.getOrElse(Json.obj())})
+  def create(seasonId: UUID, req: CreateDraft): ConnectionIO[Draft] =
+    sql"""INSERT INTO drafts (season_id, draft_type, settings)
+          VALUES ($seasonId, ${req.draftType.getOrElse("snake")}, ${req.settings.getOrElse(Json.obj())})
           RETURNING $selectDraftCols"""
       .query[Draft].unique
 

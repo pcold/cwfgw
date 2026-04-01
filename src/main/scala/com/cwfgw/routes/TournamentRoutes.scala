@@ -13,16 +13,19 @@ import com.cwfgw.service.TournamentService
 
 object TournamentRoutes:
 
-  private object SeasonParam
-      extends OptionalQueryParamDecoderMatcher[Int]("season")
+  private given QueryParamDecoder[UUID] =
+    QueryParamDecoder[String].map(UUID.fromString)
+
+  private object SeasonIdParam
+      extends OptionalQueryParamDecoderMatcher[UUID]("season_id")
   private object StatusParam
       extends OptionalQueryParamDecoderMatcher[String]("status")
 
   def routes(service: TournamentService): HttpRoutes[IO] =
     HttpRoutes.of[IO]:
       case GET -> Root / "api" / "v1" / "tournaments"
-          :? SeasonParam(season) +& StatusParam(status) =>
-        service.list(season, status).flatMap(Ok(_))
+          :? SeasonIdParam(seasonId) +& StatusParam(status) =>
+        service.list(seasonId, status).flatMap(Ok(_))
 
       case GET -> Root / "api" / "v1" / "tournaments" / UUIDVar(id) =>
         service.get(id).flatMap:
@@ -58,6 +61,13 @@ object TournamentRoutes:
 
       case POST -> Root / "api" / "v1" / "tournaments" / UUIDVar(id) / "reset" =>
         service.resetTournament(id).flatMap:
+          case Right(msg) =>
+            Ok(Json.obj("message" -> msg.asJson))
+          case Left(err) =>
+            BadRequest(Json.obj("error" -> err.asJson))
+
+      case POST -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "finalize" =>
+        service.finalizeSeason(seasonId).flatMap:
           case Right(msg) =>
             Ok(Json.obj("message" -> msg.asJson))
           case Left(err) =>

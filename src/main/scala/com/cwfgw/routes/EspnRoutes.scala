@@ -65,10 +65,10 @@ object EspnRoutes:
   /** Public read-only routes. */
   def routes(service: EspnImportService): HttpRoutes[IO] =
     HttpRoutes.of[IO]:
-      case GET -> Root / "api" / "v1" / "espn" / "preview" / UUIDVar(leagueId)
+      case GET -> Root / "api" / "v1" / "espn" / "preview" / UUIDVar(seasonId)
           :? DateParam(date) =>
         service
-          .previewByDate(leagueId, date)
+          .previewByDate(seasonId, date)
           .flatMap(previews =>
             Ok(Json.arr(previews.map(livePreviewToJson)*))
           )

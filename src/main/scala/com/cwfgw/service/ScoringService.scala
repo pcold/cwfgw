@@ -9,15 +9,15 @@ import io.circe.Json
 import io.circe.syntax.*
 import java.util.UUID
 import com.cwfgw.domain.*
-import com.cwfgw.repository.{ScoreRepository, TeamRepository, TournamentRepository, LeagueRepository}
+import com.cwfgw.repository.{ScoreRepository, TeamRepository, TournamentRepository, SeasonRepository}
 
 class ScoringService(xa: Transactor[IO]):
 
   private val sideBetRounds = List(5, 6, 7, 8)
   private val sideBetPerTeam = BigDecimal(15)
 
-  def getScores(leagueId: UUID, tournamentId: UUID): IO[List[FantasyScore]] =
-    ScoreRepository.getScores(leagueId, tournamentId).transact(xa)
+  def getScores(seasonId: UUID, tournamentId: UUID): IO[List[FantasyScore]] =
+    ScoreRepository.getScores(seasonId, tournamentId).transact(xa)
 
   def tieSplitPayout(position: Int, numTied: Int, isMajor: Boolean): BigDecimal =
     PayoutTable.tieSplitPayout(position, numTied, isMajor)
@@ -25,17 +25,17 @@ class ScoringService(xa: Transactor[IO]):
   /** Calculate scores for a tournament. Each golfer's earnings are stored,
     * then the zero-sum weekly totals can be derived.
     */
-  def calculateScores(leagueId: UUID, tournamentId: UUID): IO[Either[String, Json]] =
+  def calculateScores(seasonId: UUID, tournamentId: UUID): IO[Either[String, Json]] =
     val action = for
-      leagueOpt <- LeagueRepository.findById(leagueId)
+      seasonOpt <- SeasonRepository.findById(seasonId)
       tournamentOpt <- TournamentRepository.findById(tournamentId)
       results <- TournamentRepository.findResults(tournamentId)
-      teams <- TeamRepository.findByLeague(leagueId)
-      allRosters <- TeamRepository.getRosterByLeague(leagueId)
-      outcome <- (leagueOpt, tournamentOpt) match
-        case (None, _) => FC.pure(Left("League not found"))
+      teams <- TeamRepository.findBySeason(seasonId)
+      allRosters <- TeamRepository.getRosterBySeason(seasonId)
+      outcome <- (seasonOpt, tournamentOpt) match
+        case (None, _) => FC.pure(Left("Season not found"))
         case (_, None) => FC.pure(Left("Tournament not found"))
-        case (Some(league), Some(tournament)) =>
+        case (Some(season), Some(tournament)) =>
           val isMajor = tournament.isMajor
           val numTeams = teams.size
           val resultsByGolfer = results.map(r => r.golferId -> r).toMap
@@ -64,7 +64,7 @@ class ScoringService(xa: Transactor[IO]):
                           "payout" -> ownerPayout.asJson,
                           "is_major" -> isMajor.asJson
                         )
-                        ScoreRepository.upsertScore(leagueId, team.id, tournamentId, entry.golferId, ownerPayout, breakdown)
+                        ScoreRepository.upsertScore(seasonId, team.id, tournamentId, entry.golferId, ownerPayout, breakdown)
                           .map(s => Some((entry.golferId, ownerPayout, breakdown)))
             yield (team, golferScores.flatten, roster)
 
@@ -98,10 +98,10 @@ class ScoringService(xa: Transactor[IO]):
     action.transact(xa)
 
   /** Get season-long side bet standings for rounds 5-8 */
-  def getSideBetStandings(leagueId: UUID): IO[Either[String, Json]] =
+  def getSideBetStandings(seasonId: UUID): IO[Either[String, Json]] =
     val action = for
-      teams <- TeamRepository.findByLeague(leagueId)
-      allRosters <- TeamRepository.getRosterByLeague(leagueId)
+      teams <- TeamRepository.findBySeason(seasonId)
+      allRosters <- TeamRepository.getRosterBySeason(seasonId)
       result <-
         if teams.isEmpty then FC.pure(Left("No teams found"))
         else
@@ -110,7 +110,7 @@ class ScoringService(xa: Transactor[IO]):
           sideBetRounds.traverse: round =>
             val roundPicks = allRosters.filter(_.draftRound.contains(round))
             roundPicks.traverse: entry =>
-              sql"SELECT COALESCE(SUM(points), 0) FROM fantasy_scores WHERE league_id = $leagueId AND team_id = ${entry.teamId} AND golfer_id = ${entry.golferId}"
+              sql"SELECT COALESCE(SUM(points), 0) FROM fantasy_scores WHERE season_id = $seasonId AND team_id = ${entry.teamId} AND golfer_id = ${entry.golferId}"
                 .query[BigDecimal].unique.map(total => (entry.teamId, entry.golferId, total))
             .map: entries =>
               val sorted = entries.sortBy(-_._3)
@@ -207,14 +207,14 @@ class ScoringService(xa: Transactor[IO]):
       val winnerCollects = sideBetAmount * (numTeams - numWinners) / numWinners
       teamEarnings.map((tid, _) => if winners.contains(tid) then tid -> winnerCollects else tid -> -sideBetAmount)
 
-  def refreshStandings(leagueId: UUID): IO[List[LeagueStanding]] =
+  def refreshStandings(seasonId: UUID): IO[List[SeasonStanding]] =
     val action = for
-      teams <- TeamRepository.findByLeague(leagueId)
+      teams <- TeamRepository.findBySeason(seasonId)
       standings <- teams.traverse: team =>
         for
-          scores <- sql"SELECT COALESCE(SUM(points), 0), COUNT(DISTINCT tournament_id) FROM fantasy_scores WHERE league_id = $leagueId AND team_id = ${team.id}"
+          scores <- sql"SELECT COALESCE(SUM(points), 0), COUNT(DISTINCT tournament_id) FROM fantasy_scores WHERE season_id = $seasonId AND team_id = ${team.id}"
             .query[(BigDecimal, Int)].unique
-          standing <- ScoreRepository.upsertStanding(leagueId, team.id, scores._1, scores._2)
+          standing <- ScoreRepository.upsertStanding(seasonId, team.id, scores._1, scores._2)
         yield standing
     yield standings
     action.transact(xa)

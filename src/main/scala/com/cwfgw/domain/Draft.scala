@@ -7,7 +7,7 @@ import java.time.Instant
 
 case class Draft(
     id: UUID,
-    leagueId: UUID,
+    seasonId: UUID,
     status: String,
     draftType: String,
     settings: Json,

@@ -7,7 +7,7 @@ import java.time.Instant
 
 case class FantasyScore(
     id: UUID,
-    leagueId: UUID,
+    seasonId: UUID,
     teamId: UUID,
     tournamentId: UUID,
     golferId: UUID,
@@ -16,9 +16,9 @@ case class FantasyScore(
     calculatedAt: Instant
 ) derives ConfiguredCodec
 
-case class LeagueStanding(
+case class SeasonStanding(
     id: UUID,
-    leagueId: UUID,
+    seasonId: UUID,
     teamId: UUID,
     totalPoints: BigDecimal,
     tournamentsPlayed: Int,

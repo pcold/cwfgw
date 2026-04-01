@@ -79,7 +79,7 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
 
   /** Preview live fantasy scoring from current ESPN leaderboard, without writing to DB.
     * Shows per-team earnings based on which rostered golfers are in the top 10. */
-  def previewByDate(leagueId: UUID, date: LocalDate): IO[List[EspnLivePreview]] =
+  def previewByDate(seasonId: UUID, date: LocalDate): IO[List[EspnLivePreview]] =
     for
       json <- espnClient.fetchScoreboard(date)
       tournaments <- IO.fromEither(
@@ -87,8 +87,8 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
       )
       dbState <- (for
         allGolfers <- GolferRepository.findAll(activeOnly = false, search = None)
-        teams <- TeamRepository.findByLeague(leagueId)
-        rosters <- TeamRepository.getRosterByLeague(leagueId)
+        teams <- TeamRepository.findBySeason(seasonId)
+        rosters <- TeamRepository.getRosterBySeason(seasonId)
         // Find tournament records to check is_major
         tournamentRecords <- tournaments.traverse: espn =>
           sql"SELECT id, is_major FROM tournaments WHERE pga_tournament_id = ${espn.espnId}"

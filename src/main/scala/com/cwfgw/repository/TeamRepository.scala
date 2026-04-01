@@ -9,19 +9,19 @@ import com.cwfgw.domain.*
 
 object TeamRepository:
 
-  private val selectCols = fr"id, league_id, owner_name, team_name, team_number, created_at, updated_at"
+  private val selectCols = fr"id, season_id, owner_name, team_name, team_number, created_at, updated_at"
 
-  def findByLeague(leagueId: UUID): ConnectionIO[List[Team]] =
-    (fr"SELECT" ++ selectCols ++ fr"FROM teams WHERE league_id = $leagueId ORDER BY team_number ASC NULLS LAST, team_name")
+  def findBySeason(seasonId: UUID): ConnectionIO[List[Team]] =
+    (fr"SELECT" ++ selectCols ++ fr"FROM teams WHERE season_id = $seasonId ORDER BY team_number ASC NULLS LAST, team_name")
       .query[Team].to[List]
 
   def findById(id: UUID): ConnectionIO[Option[Team]] =
     (fr"SELECT" ++ selectCols ++ fr"FROM teams WHERE id = $id")
       .query[Team].option
 
-  def create(leagueId: UUID, req: CreateTeam): ConnectionIO[Team] =
-    sql"""INSERT INTO teams (league_id, owner_name, team_name, team_number)
-          VALUES ($leagueId, ${req.ownerName}, ${req.teamName}, ${req.teamNumber})
+  def create(seasonId: UUID, req: CreateTeam): ConnectionIO[Team] =
+    sql"""INSERT INTO teams (season_id, owner_name, team_name, team_number)
+          VALUES ($seasonId, ${req.ownerName}, ${req.teamName}, ${req.teamNumber})
           RETURNING $selectCols"""
       .query[Team].unique
 
@@ -47,20 +47,20 @@ object TeamRepository:
           RETURNING id, team_id, golfer_id, acquired_via, draft_round, ownership_pct, acquired_at, dropped_at, is_active"""
       .query[RosterEntry].unique
 
-  def getRosterByLeague(leagueId: UUID): ConnectionIO[List[RosterEntry]] =
+  def getRosterBySeason(seasonId: UUID): ConnectionIO[List[RosterEntry]] =
     sql"""SELECT r.id, r.team_id, r.golfer_id, r.acquired_via, r.draft_round, r.ownership_pct, r.acquired_at, r.dropped_at, r.is_active
           FROM team_rosters r JOIN teams t ON r.team_id = t.id
-          WHERE t.league_id = $leagueId AND r.dropped_at IS NULL
+          WHERE t.season_id = $seasonId AND r.dropped_at IS NULL
           ORDER BY r.draft_round ASC NULLS LAST"""
       .query[RosterEntry].to[List]
 
   /** Roster entries joined with golfer names, for a whole league. */
-  def getRosterViewByLeague(leagueId: UUID): ConnectionIO[List[(UUID, String, Int, String, String, BigDecimal, UUID)]] =
+  def getRosterViewBySeason(seasonId: UUID): ConnectionIO[List[(UUID, String, Int, String, String, BigDecimal, UUID)]] =
     sql"""SELECT t.id, t.team_name, r.draft_round, g.first_name, g.last_name, r.ownership_pct, g.id
           FROM team_rosters r
           JOIN teams t ON r.team_id = t.id
           JOIN golfers g ON r.golfer_id = g.id
-          WHERE t.league_id = $leagueId AND r.dropped_at IS NULL
+          WHERE t.season_id = $seasonId AND r.dropped_at IS NULL
           ORDER BY t.created_at, r.draft_round ASC NULLS LAST"""
       .query[(UUID, String, Int, String, String, BigDecimal, UUID)].to[List]
 

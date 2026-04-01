@@ -9,7 +9,7 @@ case class Tournament(
     id: UUID,
     pgaTournamentId: Option[String],
     name: String,
-    seasonYear: Int,
+    seasonId: UUID,
     startDate: LocalDate,
     endDate: LocalDate,
     courseName: Option[String],
@@ -23,7 +23,7 @@ case class Tournament(
 case class CreateTournament(
     pgaTournamentId: Option[String],
     name: String,
-    seasonYear: Int,
+    seasonId: UUID,
     startDate: LocalDate,
     endDate: LocalDate,
     courseName: Option[String],
