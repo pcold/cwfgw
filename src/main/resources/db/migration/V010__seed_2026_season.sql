@@ -1,1 +1,0 @@
--- V010: No-op (season seeding removed — seasons are now created via admin UI)

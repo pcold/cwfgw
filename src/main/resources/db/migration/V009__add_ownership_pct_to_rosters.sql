@@ -1,1 +1,0 @@
-ALTER TABLE team_rosters ADD COLUMN ownership_pct NUMERIC(5,2) NOT NULL DEFAULT 100.00;
