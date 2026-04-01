@@ -47,6 +47,8 @@ class RouteTest extends FunSuite:
     override def get(id: UUID): IO[Option[League]] =
       if id == sampleId then IO.pure(Some(sampleLeague))
       else IO.pure(None)
+    override def create(req: CreateLeague): IO[League] =
+      IO.pure(League(sampleId, req.name, sampleInstant))
 
   private val leagueRoutes =
     LeagueRoutes.routes(leagueService).orNotFound
@@ -70,6 +72,19 @@ class RouteTest extends FunSuite:
     assertEquals(
       body.hcursor.downField("name").as[String],
       Right("Test League")
+    )
+  }
+
+  test("POST /api/v1/leagues returns 201") {
+    val body = Json.obj("name" -> "New League".asJson)
+    val req = Request[IO](Method.POST, uri"/api/v1/leagues")
+      .withEntity(body)
+    val response = leagueRoutes.run(req).unsafeRunSync()
+    assertEquals(response.status, Status.Created)
+    val respBody = response.as[Json].unsafeRunSync()
+    assertEquals(
+      respBody.hcursor.downField("name").as[String],
+      Right("New League")
     )
   }
 
@@ -97,6 +112,8 @@ class RouteTest extends FunSuite:
     override def get(id: UUID): IO[Option[Season]] =
       if id == sampleId then IO.pure(Some(sampleSeason))
       else IO.pure(None)
+    override def create(req: CreateSeason): IO[Season] =
+      IO.pure(sampleSeason)
     override def standings(
         seasonId: UUID
     ): IO[List[SeasonStanding]] =
@@ -132,6 +149,18 @@ class RouteTest extends FunSuite:
       body.hcursor.downField("name").as[String],
       Right("Season 1")
     )
+  }
+
+  test("POST /api/v1/seasons returns 201") {
+    val body = Json.obj(
+      "league_id" -> sampleId.asJson,
+      "name" -> "Spring".asJson,
+      "season_year" -> 2026.asJson
+    )
+    val req = Request[IO](Method.POST, uri"/api/v1/seasons")
+      .withEntity(body)
+    val response = seasonRoutes.run(req).unsafeRunSync()
+    assertEquals(response.status, Status.Created)
   }
 
   test("GET /api/v1/seasons/:id returns 404 when not found") {
