@@ -39,20 +39,8 @@ class WeeklyReportService(espnImportService: EspnImportService, xa: Transactor[I
 
       allRosters <- TeamRepository.getRosterBySeason(seasonId)
       allScores <- allTournaments.flatTraverse(t => ScoreRepository.getScores(seasonId, t.id))
-
-      rules = seasonOpt.map(_.seasonRules).getOrElse(SeasonRules.default)
-
-      // Side bet data: cumulative earnings per team per configured side bet rounds
-      sideBetCumulative <- rules.sideBetRounds.traverse { round =>
-        val roundPicks = allRosters.filter(_.draftRound.contains(round))
-        roundPicks.traverse { entry =>
-          sql"""SELECT COALESCE(SUM(fs.points), 0)
-                FROM fantasy_scores fs
-                WHERE fs.season_id = $seasonId AND fs.team_id = ${entry.teamId} AND fs.golfer_id = ${entry.golferId}"""
-            .query[BigDecimal].unique.map(total => (entry.teamId, total * entry.ownershipPct / 100))
-        }.map(entries => (round, entries.map((tid, amt) => tid -> amt).toMap))
-      }
     yield
+      val rules = seasonOpt.map(_.seasonRules).getOrElse(SeasonRules.default)
       val golferMap = allGolfers.map(g => g.id -> g).toMap
       val resultsByGolfer = results.map(r => r.golferId -> r).toMap
       val scoresByTeamGolfer = scores.map(s => (s.teamId, s.golferId) -> s).toMap
@@ -60,53 +48,80 @@ class WeeklyReportService(espnImportService: EspnImportService, xa: Transactor[I
       val multiplier = tournament.map(_.payoutMultiplier).getOrElse(BigDecimal(1))
       val numTeams = teams.size
 
-      // Previous = sum of zero-sum weekly results for all prior tournaments
-      val priorTournaments = allTournaments.filter(t => tournament.forall(cur => t.startDate.isBefore(cur.startDate)))
+      // Tournaments and scores through the selected tournament
+      val throughTournaments = allTournaments
+        .filter(t => tournament.forall(cur =>
+          !t.startDate.isAfter(cur.startDate)))
+      val throughScores = allScores
+        .filter(s => throughTournaments.exists(_.id == s.tournamentId))
+
+      // Previous = sum of zero-sum weekly results for prior tournaments
+      val priorTournaments = throughTournaments
+        .filter(t => tournament.forall(cur =>
+          t.startDate.isBefore(cur.startDate)))
       val priorWeeklyByTeam: Map[UUID, BigDecimal] =
-        val priorScoresByTournament = allScores
+        val priorScoresByTournament = throughScores
           .filter(s => priorTournaments.exists(_.id == s.tournamentId))
           .groupBy(_.tournamentId)
-        // For each prior tournament, compute the zero-sum weekly result per team
-        priorScoresByTournament.toList.flatMap: (tid, tScores) =>
-          val teamTopTens = tScores.groupBy(_.teamId).view.mapValues(_.map(_.points).sum).toMap
+        priorScoresByTournament.toList.flatMap { (_, tScores) =>
+          val teamTopTens = tScores.groupBy(_.teamId).view
+            .mapValues(_.map(_.points).sum).toMap
           val totalPot = teamTopTens.values.sum
-          teams.map(t => t.id -> (teamTopTens.getOrElse(t.id, BigDecimal(0)) * numTeams - totalPot))
-        .groupBy(_._1).view.mapValues(_.map(_._2).sum).toMap
+          teams.map(t =>
+            t.id -> (teamTopTens.getOrElse(t.id, BigDecimal(0)) *
+              numTeams - totalPot))
+        }.groupBy(_._1).view.mapValues(_.map(_._2).sum).toMap
 
-      // All-time cumulative top-ten counts and earnings per team
-      val cumulativeTopTenCounts = allScores
+      // Cumulative top-ten counts and earnings through this tournament
+      val cumulativeTopTenCounts = throughScores
         .groupBy(_.teamId)
         .view.mapValues(_.size).toMap
-      val cumulativeTopTenEarnings = allScores
+      val cumulativeTopTenEarnings = throughScores
         .groupBy(_.teamId)
         .view.mapValues(_.map(_.points).sum).toMap
 
-      // Compute side bet results: for each round, winner gets +$15*(N-1), losers get -$15
+      // Side bet results scoped through this tournament
       val sideBetPerTeam = rules.sideBetAmount
-      val sideBetPerRound: List[(Int, Map[UUID, BigDecimal], Map[UUID, BigDecimal])] =
-        sideBetCumulative.map: (round, teamTotals) =>
-          if teamTotals.isEmpty || teamTotals.values.forall(_ == BigDecimal(0)) then
-            (round, teamTotals, Map.empty[UUID, BigDecimal])
-          else
-            val maxEarnings = teamTotals.values.max
-            val winners = teamTotals.filter(_._2 == maxEarnings).keys.toList
-            val numWinners = winners.size
-            val loserPay = sideBetPerTeam
-            val winnerCollects = loserPay * (numTeams - numWinners) / numWinners
-            val payouts = teamTotals.map: (tid, _) =>
-              if winners.contains(tid) then tid -> winnerCollects
-              else tid -> -loserPay
-            (round, teamTotals, payouts)
+      val sideBetPerRound = rules.sideBetRounds.map { round =>
+        val roundPicks =
+          allRosters.filter(_.draftRound.contains(round))
+        val teamTotals = roundPicks.map { entry =>
+          val total = throughScores
+            .filter(s =>
+              s.teamId == entry.teamId &&
+              s.golferId == entry.golferId)
+            .map(_.points).sum
+          entry.teamId -> (total * entry.ownershipPct / 100)
+        }.toMap
+        if teamTotals.isEmpty
+          || teamTotals.values.forall(_ == BigDecimal(0))
+        then (round, teamTotals, Map.empty[UUID, BigDecimal])
+        else
+          val maxEarnings = teamTotals.values.max
+          val winners = teamTotals
+            .filter(_._2 == maxEarnings).keys.toList
+          val numWinners = winners.size
+          val winnerCollects =
+            sideBetPerTeam * (numTeams - numWinners) / numWinners
+          val payouts = teamTotals.map((tid, _) =>
+            if winners.contains(tid) then tid -> winnerCollects
+            else tid -> -sideBetPerTeam)
+          (round, teamTotals, payouts)
+      }
 
       val sideBetResults: Map[UUID, BigDecimal] =
-        sideBetPerRound.map(_._3).foldLeft(Map.empty[UUID, BigDecimal]): (acc, roundMap) =>
-          roundMap.foldLeft(acc): (a, entry) =>
-            a.updated(entry._1, a.getOrElse(entry._1, BigDecimal(0)) + entry._2)
+        sideBetPerRound.map(_._3)
+          .foldLeft(Map.empty[UUID, BigDecimal]) { (acc, roundMap) =>
+            roundMap.foldLeft(acc)((a, entry) =>
+              a.updated(entry._1,
+                a.getOrElse(entry._1, BigDecimal(0)) + entry._2))
+          }
 
-      // Per-golfer/team cumulative stats: season earnings and top-10 count
-      val cumulativeByTeamGolfer = allScores
+      // Per-golfer/team cumulative stats through this tournament
+      val cumulativeByTeamGolfer = throughScores
         .groupBy(s => (s.teamId, s.golferId))
-        .view.mapValues(ss => (ss.map(_.points).sum, ss.size)).toMap
+        .view.mapValues(ss =>
+          (ss.map(_.points).sum, ss.size)).toMap
 
       // Build team columns
       val teamColumns = teams.map: team =>

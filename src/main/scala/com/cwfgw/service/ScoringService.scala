@@ -60,6 +60,10 @@ class ScoringService(xa: Transactor[IO]):
           val numTeams = teams.size
           val resultsByGolfer =
             results.map(r => r.golferId -> r).toMap
+          val golferOwners = allRosters
+            .groupBy(_.golferId)
+            .view.mapValues(_.map(e =>
+              (e.teamId, e.ownershipPct))).toMap
 
           val teamEarnings = teams.traverse { team =>
             for
@@ -94,10 +98,12 @@ class ScoringService(xa: Transactor[IO]):
                             pos, numTied,
                             multiplier, rules
                           )
-                        val ownerPayout =
-                          basePayout *
-                            entry.ownershipPct /
-                            BigDecimal(100)
+                        val owners = golferOwners
+                          .getOrElse(entry.golferId, Nil)
+                        val splits = PayoutTable
+                          .splitOwnership(basePayout, owners)
+                        val ownerPayout = splits
+                          .getOrElse(team.id, basePayout)
                         val breakdown = Json.obj(
                           "position" -> pos.asJson,
                           "num_tied" -> numTied.asJson,
@@ -266,13 +272,19 @@ class ScoringService(xa: Transactor[IO]):
 
   /** Pure: calculate a golfer's payout for a team given
     * tournament results. Returns None if the golfer has
-    * no finish in the payout zone. */
+    * no finish in the payout zone.
+    * @param owners all (teamId, ownershipPct) pairs for
+    *   this golfer, used for remainder-based rounding
+    * @param teamId the team to compute the payout for
+    */
   private[service] def calculateGolferPayout(
       position: Option[Int],
       allResults: List[TournamentResult],
       ownershipPct: BigDecimal,
       multiplier: BigDecimal,
-      rules: SeasonRules
+      rules: SeasonRules,
+      owners: List[(UUID, BigDecimal)] = Nil,
+      teamId: Option[UUID] = None
   ): Option[(BigDecimal, BigDecimal, Json)] =
     position match
       case None => None
@@ -284,7 +296,10 @@ class ScoringService(xa: Transactor[IO]):
           pos, numTied, multiplier, rules
         )
         val ownerPayout =
-          basePayout * ownershipPct / BigDecimal(100)
+          if owners.size > 1 && teamId.isDefined then
+            PayoutTable.splitOwnership(basePayout, owners)
+              .getOrElse(teamId.get, basePayout)
+          else basePayout * ownershipPct / BigDecimal(100)
         val breakdown = Json.obj(
           "position" -> pos.asJson,
           "num_tied" -> numTied.asJson,

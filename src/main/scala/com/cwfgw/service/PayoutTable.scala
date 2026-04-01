@@ -1,5 +1,7 @@
 package com.cwfgw.service
 
+import java.util.UUID
+import scala.math.BigDecimal.RoundingMode
 import com.cwfgw.domain.SeasonRules
 
 /** Payout calculation for top-N fantasy scoring.
@@ -36,3 +38,22 @@ object PayoutTable:
         .sum
       val averaged = totalPayout / numTied
       (averaged max rules.tieFloor) * multiplier
+
+  /** Split a base payout across owners so rounded values
+    * sum exactly to the base. Largest-ownership share is
+    * rounded first; the last owner gets the remainder.
+    */
+  def splitOwnership(
+      basePayout: BigDecimal,
+      owners: List[(UUID, BigDecimal)]
+  ): Map[UUID, BigDecimal] =
+    if owners.size <= 1 then
+      owners.map((id, _) => id -> basePayout).toMap
+    else
+      val sorted = owners.sortBy(-_._2)
+      val rounded = sorted.init.map { (id, pct) =>
+        id -> (basePayout * pct / 100)
+          .setScale(2, RoundingMode.HALF_UP)
+      }
+      val remainder = basePayout - rounded.map(_._2).sum
+      (rounded :+ (sorted.last._1 -> remainder)).toMap

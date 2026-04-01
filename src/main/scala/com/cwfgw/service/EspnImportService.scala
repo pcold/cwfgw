@@ -104,6 +104,9 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
       golferByName = allGolfers.map(g => (g.firstName.toLowerCase, g.lastName.toLowerCase) -> g).toMap
       golferByLastName = allGolfers.groupBy(_.lastName.toLowerCase)
       rostersByTeam = rosters.groupBy(_.teamId)
+      golferOwners = rosters.groupBy(_.golferId)
+        .view.mapValues(_.map(e =>
+          (e.teamId, e.ownershipPct))).toMap
       numPlaces = rules.payouts.size
       previews = tournaments.zip(tournamentRecords).map { (espn, tournamentRecord) =>
         val multiplier = tournamentRecord
@@ -138,7 +141,9 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
             yield
               val numTied = tiedCounts.getOrElse(competitor.position, 1)
               val basePayout = PayoutTable.tieSplitPayout(competitor.position, numTied, multiplier, rules)
-              val ownerPayout = basePayout * entry.ownershipPct / BigDecimal(100)
+              val owners = golferOwners.getOrElse(golfer.id, Nil)
+              val splits = PayoutTable.splitOwnership(basePayout, owners)
+              val ownerPayout = splits.getOrElse(team.id, basePayout)
               PreviewGolferScore(
                 golferName = s"${golfer.firstName} ${golfer.lastName}",
                 golferId = golfer.id,
