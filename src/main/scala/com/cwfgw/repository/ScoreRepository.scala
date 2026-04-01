@@ -27,11 +27,14 @@ object ScoreRepository:
       .query[FantasyScore].unique
 
   def getGolferSeasonScores(seasonId: UUID, golferId: UUID): ConnectionIO[List[(String, Int, BigDecimal, BigDecimal)]] =
-    sql"""SELECT t.name, COALESCE((fs.breakdown->>'position')::int, 0), fs.points,
-                 COALESCE((fs.breakdown->>'base_payout')::numeric, 0)
+    sql"""SELECT t.name,
+                 COALESCE((MIN(fs.breakdown->>'position'))::int, 0),
+                 MIN(fs.points),
+                 COALESCE(MIN((fs.breakdown->>'base_payout')::numeric), 0)
           FROM fantasy_scores fs
           JOIN tournaments t ON fs.tournament_id = t.id
           WHERE fs.season_id = $seasonId AND fs.golfer_id = $golferId
+          GROUP BY t.id, t.name, t.start_date
           ORDER BY t.start_date ASC"""
       .query[(String, Int, BigDecimal, BigDecimal)].to[List]
 
