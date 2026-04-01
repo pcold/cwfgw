@@ -15,7 +15,7 @@ case class Tournament(
     courseName: Option[String],
     status: String,
     purseAmount: Option[Long],
-    isMajor: Boolean,
+    payoutMultiplier: BigDecimal,
     metadata: Json,
     createdAt: Instant
 ) derives ConfiguredCodec
@@ -28,7 +28,7 @@ case class CreateTournament(
     endDate: LocalDate,
     courseName: Option[String],
     purseAmount: Option[Long],
-    isMajor: Option[Boolean],
+    payoutMultiplier: Option[BigDecimal],
     metadata: Option[Json] = None
 ) derives ConfiguredCodec
 
@@ -39,7 +39,7 @@ case class UpdateTournament(
     courseName: Option[String],
     status: Option[String],
     purseAmount: Option[Long],
-    isMajor: Option[Boolean]
+    payoutMultiplier: Option[BigDecimal]
 ) derives ConfiguredCodec
 
 case class TournamentResult(

@@ -121,7 +121,7 @@ class EspnImportModelsTest extends FunSuite:
       espnName = "The Players",
       espnId = "401580123",
       completed = false,
-      isMajor = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 144,
       teams = List(teamScore),
       leaderboard = List(lbEntry)

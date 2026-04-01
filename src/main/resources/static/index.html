@@ -98,7 +98,7 @@
       <select x-model="selectedTournament" @change="loadScoreboard()"
               class="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm w-full sm:w-auto">
         <template x-for="t in tournaments" :key="t.id">
-          <option :value="t.id" x-text="'Wk ' + (t.metadata?.week || '?') + ' — ' + t.name + (t.is_major ? ' (Major)' : '') + ' — ' + t.status"></option>
+          <option :value="t.id" x-text="'Wk ' + (t.metadata?.week || '?') + ' — ' + t.name + (t.payout_multiplier != 1 ? ' (' + t.payout_multiplier + 'x)' : '') + ' — ' + t.status"></option>
         </template>
       </select>
       <span class="text-xs text-gray-500" x-show="scoreboardLoading">Loading...</span>
@@ -212,7 +212,7 @@
         <select x-model="reportTournament" @change="loadReport()"
                 class="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm">
           <template x-for="t in tournaments" :key="t.id">
-            <option :value="t.id" x-text="'Wk ' + (t.metadata?.week || '?') + ' — ' + t.name + (t.is_major ? ' **' : '') + ' — ' + t.status"></option>
+            <option :value="t.id" x-text="'Wk ' + (t.metadata?.week || '?') + ' — ' + t.name + (t.payout_multiplier != 1 ? ' ' + t.payout_multiplier + 'x' : '') + ' — ' + t.status"></option>
           </template>
         </select>
         <label class="flex items-center gap-2 text-sm cursor-pointer select-none">
@@ -230,7 +230,7 @@
           <span x-text="'Week ' + (report?.tournament?.week || '?')"></span>
           <span class="mx-2">|</span>
           <span x-text="report?.tournament?.name"></span>
-          <span x-show="report?.tournament?.is_major" class="ml-1 text-yellow-300">**MAJOR**</span>
+          <span x-show="report?.tournament?.payout_multiplier != 1" class="ml-1 text-yellow-300" x-text="'**' + report?.tournament?.payout_multiplier + 'x**'"></span>
         </div>
         <div class="flex gap-4">
           <template x-for="(s, i) in report?.standings_order?.slice(0, 5) || []" :key="s.team_name">
@@ -586,22 +586,21 @@
 
     <!-- RULES PAGE -->
     <div x-show="page === 'rules'">
-      <h2 class="text-xl font-bold mb-6">League Rules</h2>
+      <h2 class="text-xl font-bold mb-6">Season Rules</h2>
 
       <!-- Draft -->
       <div class="bg-gray-800 rounded-lg p-6 mb-6">
         <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">The Draft</h3>
         <ul class="text-gray-300 space-y-1 text-sm">
-          <li>13 teams, 8-round snake draft</li>
-          <li>Each team drafts 8 PGA Tour players</li>
+          <li>Snake draft, each team drafts PGA Tour players</li>
           <li>Players can be split between teams with ownership percentages (earnings divided proportionally)</li>
         </ul>
       </div>
 
-      <!-- Weekly Payouts -->
+      <!-- Weekly Payouts (dynamic from season rules) -->
       <div class="bg-gray-800 rounded-lg p-6 mb-6">
         <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Weekly Payouts</h3>
-        <p class="text-gray-400 text-sm mb-3">Each PGA tournament, the top 10 finishers among all drafted players earn payouts:</p>
+        <p class="text-gray-400 text-sm mb-3">Each PGA tournament, the top <span x-text="currentRules().payouts.length"></span> finishers among all drafted players earn payouts:</p>
         <table class="w-full max-w-xs text-sm">
           <thead>
             <tr class="text-gray-400 border-b border-gray-700">
@@ -610,32 +609,25 @@
             </tr>
           </thead>
           <tbody class="text-gray-300">
-            <tr><td class="py-0.5">1st</td><td class="text-right">$18</td></tr>
-            <tr><td class="py-0.5">2nd</td><td class="text-right">$12</td></tr>
-            <tr><td class="py-0.5">3rd</td><td class="text-right">$10</td></tr>
-            <tr><td class="py-0.5">4th</td><td class="text-right">$8</td></tr>
-            <tr><td class="py-0.5">5th</td><td class="text-right">$7</td></tr>
-            <tr><td class="py-0.5">6th</td><td class="text-right">$6</td></tr>
-            <tr><td class="py-0.5">7th</td><td class="text-right">$5</td></tr>
-            <tr><td class="py-0.5">8th</td><td class="text-right">$4</td></tr>
-            <tr><td class="py-0.5">9th</td><td class="text-right">$3</td></tr>
-            <tr><td class="py-0.5">10th</td><td class="text-right">$2</td></tr>
+            <template x-for="(amt, i) in currentRules().payouts" :key="i">
+              <tr><td class="py-0.5" x-text="ordinal(i + 1)"></td><td class="text-right" x-text="'$' + amt"></td></tr>
+            </template>
           </tbody>
         </table>
       </div>
 
-      <!-- Majors -->
+      <!-- Multiplier Tournaments -->
       <div class="bg-gray-800 rounded-lg p-6 mb-6">
-        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Major Tournaments</h3>
-        <p class="text-gray-300 text-sm">All payouts are <span class="text-yellow-400 font-semibold">doubled</span> for the four majors and two additional premier events:</p>
-        <ul class="text-gray-300 text-sm mt-2 space-y-0.5 list-disc list-inside">
-          <li>The Masters</li>
-          <li>PGA Championship</li>
-          <li>U.S. Open</li>
-          <li>The Open Championship</li>
-          <li>The Players Championship</li>
-          <li>Tour Championship</li>
-        </ul>
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Multiplier Tournaments</h3>
+        <p class="text-gray-300 text-sm">Some tournaments have boosted payouts (e.g. 2x for majors). The multiplier is set per tournament in the schedule.</p>
+        <template x-if="tournaments.filter(t => t.payout_multiplier != 1).length > 0">
+          <ul class="text-gray-300 text-sm mt-2 space-y-0.5 list-disc list-inside">
+            <template x-for="t in tournaments.filter(t => t.payout_multiplier != 1)" :key="t.id">
+              <li><span x-text="t.name"></span> <span class="text-yellow-400 font-semibold" x-text="t.payout_multiplier + 'x'"></span></li>
+            </template>
+          </ul>
+        </template>
+        <p x-show="tournaments.filter(t => t.payout_multiplier != 1).length === 0" class="text-gray-500 text-sm mt-2">No multiplier tournaments in this season.</p>
       </div>
 
       <!-- Ties -->
@@ -643,9 +635,7 @@
         <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Tie Handling</h3>
         <ul class="text-gray-300 space-y-1 text-sm">
           <li>Tied positions average the payouts across all tied slots</li>
-          <li>Example: T4 with 3 tied = ($8 + $7 + $6) / 3 = $7.00 each</li>
-          <li>Minimum payout of <span class="text-green-400 font-semibold">$1</span> per player for any tie that overlaps the top-10 zone</li>
-          <li>Example: T9 with 5 tied = max(avg($3, $2, $0, $0, $0), $1) = $1.00 each</li>
+          <li>Minimum payout of <span class="text-green-400 font-semibold" x-text="'$' + currentRules().tie_floor"></span> per player for any tie that overlaps the payout zone</li>
         </ul>
       </div>
 
@@ -653,20 +643,22 @@
       <div class="bg-gray-800 rounded-lg p-6 mb-6">
         <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Zero-Sum Scoring</h3>
         <ul class="text-gray-300 space-y-1 text-sm">
-          <li>Each top-10 finish earns that payout from every other team</li>
-          <li>Formula: <code class="bg-gray-700 px-1 rounded">weekly +/- = (your top-10 earnings &times; 13) &minus; total pot</code></li>
+          <li>Each top-N finish earns that payout from every other team</li>
+          <li>Formula: <code class="bg-gray-700 px-1 rounded">weekly +/- = (your earnings &times; num_teams) &minus; total pot</code></li>
           <li>The league is zero-sum &mdash; every dollar won is a dollar lost by someone else</li>
-          <li>Undrafted players who finish top 10 are tracked but don't affect team payouts</li>
+          <li>Undrafted players who finish in the payout zone are tracked but don't affect team payouts</li>
         </ul>
       </div>
 
-      <!-- Side Bets -->
-      <div class="bg-gray-800 rounded-lg p-6 mb-6">
-        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">Late Row Side Bets (Rounds 5&ndash;8)</h3>
+      <!-- Side Bets (dynamic) -->
+      <div class="bg-gray-800 rounded-lg p-6 mb-6" x-show="currentRules().side_bet_rounds.length > 0">
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-3">
+          Side Bets (Rounds <span x-text="currentRules().side_bet_rounds.join(', ')"></span>)
+        </h3>
         <ul class="text-gray-300 space-y-1 text-sm">
-          <li>4 separate season-long races &mdash; one for each draft round (5, 6, 7, 8)</li>
+          <li><span x-text="currentRules().side_bet_rounds.length"></span> separate season-long races &mdash; one for each draft round</li>
           <li>Winner = the team whose round-N pick has the highest cumulative earnings across all tournaments</li>
-          <li>Winner collects <span class="text-green-400 font-semibold">$15</span> from every other team ($15 &times; 12 = $180 gross)</li>
+          <li>Winner collects <span class="text-green-400 font-semibold" x-text="'$' + currentRules().side_bet_amount"></span> from every other team</li>
           <li>Side bet is not active if all entries are at $0</li>
         </ul>
       </div>
@@ -715,27 +707,98 @@
           <div>
             <label class="block text-xs text-gray-400 mb-1">Season Name</label>
             <input type="text" x-model="adminSeasonName"
-                   placeholder="e.g. 2026 Spring"
+                   placeholder="e.g. Spring"
                    class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-full sm:w-48">
           </div>
         </div>
 
+        <!-- Season Rules -->
         <div class="mb-4">
-          <label class="block text-xs text-gray-400 mb-1">Schedule (paste text file contents)</label>
+          <h4 class="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-2">Payout Rules</h4>
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
+            <template x-for="(amt, i) in adminRulesPayouts" :key="i">
+              <div class="flex items-center gap-1">
+                <span class="text-xs text-gray-500 w-6" x-text="(i+1) + '.'"></span>
+                <span class="text-xs text-gray-500">$</span>
+                <input type="number" :value="amt" @input="adminRulesPayouts[i] = Number($event.target.value)"
+                       class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm w-16">
+              </div>
+            </template>
+          </div>
+          <div class="flex flex-wrap gap-4 items-end mb-3">
+            <div>
+              <button @click="adminRulesPayouts.push(0)" class="text-xs text-blue-400 hover:text-blue-300">+ Add place</button>
+              <button @click="adminRulesPayouts.length > 1 && adminRulesPayouts.pop()" class="text-xs text-red-400 hover:text-red-300 ml-2">- Remove last</button>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-400 mb-1">Tie Floor ($)</label>
+              <input type="number" x-model.number="adminRulesTieFloor" step="0.5"
+                     class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm w-16">
+            </div>
+          </div>
+
+          <h4 class="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-2 mt-4">Side Bets</h4>
+          <div class="flex flex-wrap gap-4 items-end">
+            <div>
+              <label class="block text-xs text-gray-400 mb-1">Rounds</label>
+              <input type="text" x-model="adminRulesSideBetRoundsStr"
+                     placeholder="5,6,7,8"
+                     class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm w-28">
+            </div>
+            <div>
+              <label class="block text-xs text-gray-400 mb-1">Bet Amount ($)</label>
+              <input type="number" x-model.number="adminRulesSideBetAmount"
+                     class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm w-16">
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button @click="createSeasonOnly()"
+                  :disabled="adminCreatingSeason || !adminSeasonName.trim() || !adminLeagueId"
+                  class="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded text-sm font-medium transition">
+            <span x-show="!adminCreatingSeason">Create Season</span>
+            <span x-show="adminCreatingSeason">Creating...</span>
+          </button>
+          <span x-show="adminSeasonSuccess" class="text-green-400 text-sm" x-text="adminSeasonSuccess"></span>
+          <span x-show="adminSeasonError" class="text-red-400 text-sm" x-text="adminSeasonError"></span>
+        </div>
+      </div>
+
+      <!-- Upload Schedule -->
+      <div class="bg-gray-800 rounded-lg p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Upload Season Schedule</h3>
+
+        <div class="flex flex-wrap gap-4 mb-4">
+          <div>
+            <label class="block text-xs text-gray-400 mb-1">Season</label>
+            <select x-model="adminScheduleSeasonId"
+                    class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-full sm:w-64">
+              <option value="" disabled>Select a season</option>
+              <template x-for="s in seasons" :key="s.id">
+                <option :value="s.id" x-text="seasonLabel(s)"></option>
+              </template>
+            </select>
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label class="block text-xs text-gray-400 mb-1">Schedule (one tournament per line, optional Nx multiplier)</label>
           <textarea x-model="adminScheduleText" rows="16"
                     class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-full font-mono leading-relaxed"
                     placeholder="1 1 Jan 15-18 Sony Open
 2 2 Jan 22-25 The American Express
-3 3 Jan 29-Feb1 Farmers Insurance Open
+9 10 March 12-15 The Players Championship 2x
+15 15 April 9-12 The Masters 2x
 ..."></textarea>
         </div>
 
         <div class="flex items-center gap-4">
-          <button @click="createSeason()"
-                  :disabled="adminUploading || !adminScheduleText.trim() || !adminSeasonName.trim() || !adminLeagueId"
+          <button @click="uploadSchedule()"
+                  :disabled="adminUploading || !adminScheduleText.trim() || !adminScheduleSeasonId"
                   class="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded text-sm font-medium transition">
-            <span x-show="!adminUploading">Create &amp; Validate with ESPN</span>
-            <span x-show="adminUploading">Creating...</span>
+            <span x-show="!adminUploading">Upload &amp; Validate with ESPN</span>
+            <span x-show="adminUploading">Uploading...</span>
           </button>
           <span x-show="adminError" class="text-red-400 text-sm" x-text="adminError"></span>
         </div>
@@ -779,7 +842,7 @@
               <th class="px-3 py-2 text-left">Wk</th>
               <th class="px-3 py-2 text-left">Tournament</th>
               <th class="px-3 py-2 text-left">Dates</th>
-              <th class="px-3 py-2 text-center">Major</th>
+              <th class="px-3 py-2 text-center">Mult</th>
               <th class="px-3 py-2 text-left">ESPN Match</th>
             </tr>
           </thead>
@@ -789,7 +852,7 @@
                 <td class="px-3 py-2 text-gray-400 font-mono" x-text="t.week"></td>
                 <td class="px-3 py-2 font-medium" x-text="t.name"></td>
                 <td class="px-3 py-2 text-gray-400 text-xs" x-text="t.start_date + ' to ' + t.end_date"></td>
-                <td class="px-3 py-2 text-center" x-text="t.is_major ? '$$' : ''"></td>
+                <td class="px-3 py-2 text-center" x-text="t.payout_multiplier != 1 ? t.payout_multiplier + 'x' : ''"></td>
                 <td class="px-3 py-2 text-xs" :class="t.espn_id ? 'text-green-400' : 'text-yellow-400'">
                   <span x-show="t.espn_id" x-text="t.espn_name + ' (' + t.espn_id + ')'"></span>
                   <span x-show="!t.espn_id">No match</span>
@@ -1151,6 +1214,14 @@ TEAM 2 BURRELL
         adminLeagueId: null,
         adminSeasonYear: new Date().getFullYear(),
         adminSeasonName: '',
+        adminCreatingSeason: false,
+        adminSeasonSuccess: '',
+        adminSeasonError: '',
+        adminRulesPayouts: [18, 12, 10, 8, 7, 6, 5, 4, 3, 2],
+        adminRulesTieFloor: 1,
+        adminRulesSideBetRoundsStr: '5,6,7,8',
+        adminRulesSideBetAmount: 15,
+        adminScheduleSeasonId: '',
         adminScheduleText: '',
         adminUploading: false,
         adminResult: null,
@@ -1184,6 +1255,23 @@ TEAM 2 BURRELL
 
         seasonLabel(s) {
           return s.season_year + ' ' + s.name;
+        },
+
+        currentRules() {
+          const season = this.seasons.find(s => s.id === this.currentSeasonId);
+          const r = season?.rules;
+          return {
+            payouts: r?.payouts || [18, 12, 10, 8, 7, 6, 5, 4, 3, 2],
+            tie_floor: r?.tie_floor ?? 1,
+            side_bet_rounds: r?.side_bet_rounds || [5, 6, 7, 8],
+            side_bet_amount: r?.side_bet_amount ?? 15
+          };
+        },
+
+        ordinal(n) {
+          const s = ['th','st','nd','rd'];
+          const v = n % 100;
+          return n + (s[(v - 20) % 10] || s[v] || s[0]);
         },
 
         async checkAuth() {
@@ -1580,48 +1668,65 @@ TEAM 2 BURRELL
           this.rostersLoading = false;
         },
 
-        async createSeason() {
-          this.adminUploading = true;
-          this.adminError = '';
-          this.adminResult = null;
-
+        async createSeasonOnly() {
+          this.adminCreatingSeason = true;
+          this.adminSeasonError = '';
+          this.adminSeasonSuccess = '';
           try {
-            // Step 1: create the season
-            const createResp = await fetch('/api/v1/seasons', {
+            const sideBetRounds = this.adminRulesSideBetRoundsStr
+              .split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+            const rules = {
+              payouts: this.adminRulesPayouts.map(Number),
+              tie_floor: Number(this.adminRulesTieFloor),
+              side_bet_rounds: sideBetRounds,
+              side_bet_amount: Number(this.adminRulesSideBetAmount)
+            };
+            const resp = await fetch('/api/v1/seasons', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 league_id: this.adminLeagueId,
                 name: this.adminSeasonName.trim(),
-                season_year: this.adminSeasonYear
+                season_year: this.adminSeasonYear,
+                rules
               })
             });
-            if (!createResp.ok) {
-              const err = await createResp.json();
-              this.adminError = err.error || 'Failed to create season';
-              this.adminUploading = false;
+            if (!resp.ok) {
+              const err = await resp.json();
+              this.adminSeasonError = err.error || 'Failed to create season';
               return;
             }
-            const season = await createResp.json();
+            const season = await resp.json();
+            await this.loadSeasons();
+            this.currentSeasonId = season.id;
+            this.adminScheduleSeasonId = season.id;
+            this.adminSeasonSuccess = `Season "${this.adminSeasonName}" created`;
+          } catch (e) {
+            this.adminSeasonError = e.message;
+          } finally {
+            this.adminCreatingSeason = false;
+          }
+        },
 
-            // Step 2: upload schedule to the new season
-            const uploadResp = await fetch('/api/v1/admin/season', {
+        async uploadSchedule() {
+          this.adminUploading = true;
+          this.adminError = '';
+          this.adminResult = null;
+          try {
+            const season = this.seasons.find(s => s.id === this.adminScheduleSeasonId);
+            const resp = await fetch('/api/v1/admin/season', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                season_id: season.id,
-                season_year: this.adminSeasonYear,
+                season_id: this.adminScheduleSeasonId,
+                season_year: season?.season_year || this.adminSeasonYear,
                 schedule: this.adminScheduleText
               })
             });
-            const data = await uploadResp.json();
-            if (uploadResp.ok) {
+            const data = await resp.json();
+            if (resp.ok) {
               this.adminResult = data;
-              this.rosterLeagueId = this.adminLeagueId;
-              this.resetLeagueId = this.adminLeagueId;
-              await this.loadSeasons();
-              this.currentSeasonId = season.id;
-              this.rosterSeasonId = season.id;
+              this.rosterSeasonId = this.adminScheduleSeasonId;
               await this.loadTournaments();
               this.autoSelectTournament();
             } else {

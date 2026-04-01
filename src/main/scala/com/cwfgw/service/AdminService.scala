@@ -60,7 +60,8 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
           endDate = parsed.endDate,
           courseName = None,
           purseAmount = None,
-          isMajor = Some(parsed.isMajor),
+          payoutMultiplier =
+            Some(parsed.payoutMultiplier),
           metadata = Some(metadata)
         )
         TournamentRepository.create(req).transact(xa).map: tournament =>
@@ -70,7 +71,8 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
             week = parsed.week,
             startDate = parsed.startDate,
             endDate = parsed.endDate,
-            isMajor = parsed.isMajor,
+            payoutMultiplier =
+              parsed.payoutMultiplier,
             espnId = espnMatch.map(_.id),
             espnName = espnMatch.map(_.label)
           )
@@ -378,7 +380,7 @@ case class TournamentCreated(
     week: String,
     startDate: LocalDate,
     endDate: LocalDate,
-    isMajor: Boolean,
+    payoutMultiplier: BigDecimal,
     espnId: Option[String],
     espnName: Option[String]
 )

@@ -54,7 +54,7 @@ CREATE TABLE tournaments (
     course_name       TEXT,
     status            TEXT NOT NULL DEFAULT 'upcoming',
     purse_amount      BIGINT,
-    is_major          BOOLEAN NOT NULL DEFAULT false,
+    payout_multiplier NUMERIC(4,2) NOT NULL DEFAULT 1.00,
     metadata          JSONB NOT NULL DEFAULT '{}',
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );

@@ -604,7 +604,7 @@ class RouteTest extends FunSuite:
     sampleId, Some("401"), "The Masters", sampleId,
     LocalDate.of(2026, 4, 9), LocalDate.of(2026, 4, 12),
     Some("Augusta National"), "completed", Some(20000000L),
-    true, Json.obj(), sampleInstant
+    BigDecimal(2), Json.obj(), sampleInstant
   )
 
   private val tournamentService =

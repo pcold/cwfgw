@@ -12,8 +12,8 @@ object TournamentRepository:
 
   private val selectCols =
     fr"""id, pga_tournament_id, name, season_id, start_date,
-         end_date, course_name, status, purse_amount, is_major,
-         metadata, created_at"""
+         end_date, course_name, status, purse_amount,
+         payout_multiplier, metadata, created_at"""
 
   def findAll(
       seasonId: Option[UUID],
@@ -40,11 +40,13 @@ object TournamentRepository:
   def create(req: CreateTournament): ConnectionIO[Tournament] =
     sql"""INSERT INTO tournaments (
             pga_tournament_id, name, season_id, start_date,
-            end_date, course_name, purse_amount, is_major, metadata
+            end_date, course_name, purse_amount,
+            payout_multiplier, metadata
           ) VALUES (
             ${req.pgaTournamentId}, ${req.name}, ${req.seasonId},
             ${req.startDate}, ${req.endDate}, ${req.courseName},
-            ${req.purseAmount}, ${req.isMajor.getOrElse(false)},
+            ${req.purseAmount},
+            ${req.payoutMultiplier.getOrElse(BigDecimal(1))},
             ${req.metadata.getOrElse(Json.obj())}
           ) RETURNING $selectCols"""
       .query[Tournament].unique
@@ -60,7 +62,9 @@ object TournamentRepository:
       req.courseName.map(v => fr"course_name = $v"),
       req.status.map(v => fr"status = $v"),
       req.purseAmount.map(v => fr"purse_amount = $v"),
-      req.isMajor.map(v => fr"is_major = $v")
+      req.payoutMultiplier.map(v =>
+        fr"payout_multiplier = $v"
+      )
     ).flatten
     if sets.isEmpty then findById(id)
     else

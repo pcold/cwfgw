@@ -140,7 +140,7 @@ class DomainCodecTest extends FunSuite:
       sampleId, Some("401"), "The Masters", sampleId,
       LocalDate.of(2026, 4, 9), LocalDate.of(2026, 4, 12),
       Some("Augusta National"), "completed", Some(20000000L),
-      true, Json.obj(), sampleInstant
+      BigDecimal(2), Json.obj(), sampleInstant
     )
     val json = t.asJson
     assert(json.hcursor.downField("pga_tournament_id").as[String].isRight)
@@ -149,7 +149,7 @@ class DomainCodecTest extends FunSuite:
     assert(json.hcursor.downField("end_date").as[String].isRight)
     assert(json.hcursor.downField("course_name").as[String].isRight)
     assert(json.hcursor.downField("purse_amount").as[Long].isRight)
-    assert(json.hcursor.downField("is_major").as[Boolean].isRight)
+    assert(json.hcursor.downField("payout_multiplier").as[BigDecimal].isRight)
     assert(json.hcursor.downField("created_at").as[String].isRight)
   }
 
@@ -158,7 +158,7 @@ class DomainCodecTest extends FunSuite:
       sampleId, Some("401"), "The Masters", sampleId,
       LocalDate.of(2026, 4, 9), LocalDate.of(2026, 4, 12),
       Some("Augusta National"), "completed", Some(20000000L),
-      true, Json.obj(), sampleInstant
+      BigDecimal(2), Json.obj(), sampleInstant
     )
     val decoded = decode[Tournament](t.asJson.noSpaces)
     assertEquals(decoded, Right(t))
@@ -173,7 +173,7 @@ class DomainCodecTest extends FunSuite:
     assertEquals(ct.name, "Test Open")
     assertEquals(ct.seasonId, sampleId)
     assertEquals(ct.pgaTournamentId, None)
-    assertEquals(ct.isMajor, None)
+    assertEquals(ct.payoutMultiplier, None)
   }
 
   test("TournamentResult round-trips") {
@@ -370,7 +370,7 @@ class DomainCodecTest extends FunSuite:
     val t = Tournament(
       sampleId, None, "Charity Open", sampleId,
       LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 4),
-      None, "upcoming", Some(0L), false, Json.obj(), sampleInstant
+      None, "upcoming", Some(0L), BigDecimal(1), Json.obj(), sampleInstant
     )
     val decoded = decode[Tournament](t.asJson.noSpaces)
     assertEquals(decoded, Right(t))

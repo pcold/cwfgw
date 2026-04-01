@@ -150,7 +150,7 @@ class TournamentService(
                       courseName = None,
                       status = Some("upcoming"),
                       purseAmount = None,
-                      isMajor = None
+                      payoutMultiplier = None
                     )
                   )
                   .transact(xa)

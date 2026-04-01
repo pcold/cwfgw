@@ -86,7 +86,7 @@ object AdminRoutes:
                     "week" -> t.week.asJson,
                     "start_date" -> t.startDate.asJson,
                     "end_date" -> t.endDate.asJson,
-                    "is_major" -> t.isMajor.asJson,
+                    "payout_multiplier" -> t.payoutMultiplier.asJson,
                     "espn_id" -> t.espnId.asJson,
                     "espn_name" -> t.espnName.asJson
                   )

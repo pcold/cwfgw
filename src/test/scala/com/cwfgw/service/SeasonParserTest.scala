@@ -19,7 +19,7 @@ class SeasonParserTest extends FunSuite:
     assertEquals(t.startDate, LocalDate.of(2026, 1, 15))
     assertEquals(t.endDate, LocalDate.of(2026, 1, 18))
     assertEquals(t.name, "Sony Open")
-    assertEquals(t.isMajor, false)
+    assertEquals(t.payoutMultiplier, BigDecimal(1))
     assertEquals(t.isSignature, false)
     assertEquals(t.notes, None)
   }
@@ -60,7 +60,7 @@ class SeasonParserTest extends FunSuite:
     assertEquals(t.endDate, LocalDate.of(2026, 2, 1))
   }
 
-  test("parse cross-month with full month name like 30-March2") {
+  test("parse cross-month with full month name") {
     val input = "8 8 Nov 30-Dec3 Hero World Challenge"
     val result = SeasonParser.parse(input, 2026)
     assert(result.isRight)
@@ -69,10 +69,9 @@ class SeasonParserTest extends FunSuite:
     assertEquals(t.endDate, LocalDate.of(2026, 12, 3))
   }
 
-  // ---------- Same-month rollover (end day < start day) ----------
+  // ---------- Same-month rollover ----------
 
   test("end day smaller than start day implies next month") {
-    // e.g., "28-1" in March means March 28 to April 1
     val input = "6 6 March 28-1 Valero Texas Open"
     val result = SeasonParser.parse(input, 2026)
     assert(result.isRight)
@@ -81,16 +80,41 @@ class SeasonParserTest extends FunSuite:
     assertEquals(t.endDate, LocalDate.of(2026, 4, 1))
   }
 
-  // ---------- Major tournaments ----------
+  // ---------- Multiplier (Nx) ----------
 
-  test("Double $$ marks a major") {
+  test("2x marks a 2x multiplier tournament") {
+    val input = "15 15 April 9-12 The Masters 2x"
+    val result = SeasonParser.parse(input, 2026)
+    assert(result.isRight)
+    val t = result.toOption.get.head
+    assertEquals(t.payoutMultiplier, BigDecimal(2))
+    assertEquals(t.name, "The Masters")
+    assert(t.notes.exists(_.contains("2x")))
+  }
+
+  test("1.5x marks a 1.5x multiplier tournament") {
+    val input = "8a 8 March 5-8 Arnold Palmer Invitational 1.5x"
+    val result = SeasonParser.parse(input, 2026)
+    assert(result.isRight)
+    val t = result.toOption.get.head
+    assertEquals(t.payoutMultiplier, BigDecimal("1.5"))
+    assertEquals(t.name, "Arnold Palmer Invitational")
+  }
+
+  test("no multiplier suffix defaults to 1x") {
+    val input = "1 1 Jan 15-18 Sony Open"
+    val result = SeasonParser.parse(input, 2026)
+    assert(result.isRight)
+    assertEquals(result.toOption.get.head.payoutMultiplier, BigDecimal(1))
+  }
+
+  test("legacy Double $$ still sets 2x multiplier") {
     val input = "15 15 April 9-12 The Masters Double $$"
     val result = SeasonParser.parse(input, 2026)
     assert(result.isRight)
     val t = result.toOption.get.head
-    assertEquals(t.isMajor, true)
+    assertEquals(t.payoutMultiplier, BigDecimal(2))
     assertEquals(t.name, "The Masters")
-    assert(t.notes.exists(_.contains("Double $$")))
   }
 
   // ---------- Signature events ----------
@@ -141,15 +165,14 @@ class SeasonParserTest extends FunSuite:
 
   // ---------- Combined markers ----------
 
-  test("major signature event with 2-event week") {
-    val input = "9 10 March 12-15 The Players Championship*** Double $$ 2 event week"
+  test("signature event with multiplier and 2-event week") {
+    val input = "9 10 March 12-15 The Players Championship*** 2x"
     val result = SeasonParser.parse(input, 2026)
     assert(result.isRight)
     val t = result.toOption.get.head
-    assertEquals(t.isMajor, true)
+    assertEquals(t.payoutMultiplier, BigDecimal(2))
     assertEquals(t.isSignature, true)
     assertEquals(t.name, "The Players Championship")
-    assert(t.notes.exists(n => n.contains("Double $$") && n.contains("2 event week")))
   }
 
   // ---------- Error cases ----------

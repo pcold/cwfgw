@@ -27,7 +27,7 @@ object EspnRoutes:
     "espn_name" -> p.espnName.asJson,
     "espn_id" -> p.espnId.asJson,
     "completed" -> p.completed.asJson,
-    "is_major" -> p.isMajor.asJson,
+    "payout_multiplier" -> p.payoutMultiplier.asJson,
     "total_competitors" -> p.totalCompetitors.asJson,
     "teams" -> p.teams.map: t =>
       Json.obj(

@@ -15,7 +15,7 @@ import java.time.LocalDate
 
 import com.cwfgw.domain.*
 import com.cwfgw.espn.{EspnCalendarEntry, EspnClient, EspnCompetitor, EspnTournament}
-import com.cwfgw.repository.{GolferRepository, TeamRepository, TournamentRepository}
+import com.cwfgw.repository.{GolferRepository, SeasonRepository, TeamRepository, TournamentRepository}
 
 /** Imports ESPN tournament results into the database.
   *
@@ -86,49 +86,58 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
         espnClient.parseAllLeaderboards(json).left.map(e => new RuntimeException(e))
       )
       dbState <- (for
+        seasonOpt <- SeasonRepository.findById(seasonId)
         allGolfers <- GolferRepository.findAll(activeOnly = false, search = None)
         teams <- TeamRepository.findBySeason(seasonId)
         rosters <- TeamRepository.getRosterBySeason(seasonId)
-        // Find tournament records to check is_major
-        tournamentRecords <- tournaments.traverse: espn =>
-          sql"SELECT id, is_major FROM tournaments WHERE pga_tournament_id = ${espn.espnId}"
-            .query[(UUID, Boolean)].option
-      yield (allGolfers, teams, rosters, tournamentRecords)).transact(xa)
-      (allGolfers, teams, rosters, tournamentRecords) = dbState
+        tournamentRecords <- tournaments.traverse { espn =>
+          sql"""SELECT id, payout_multiplier
+                FROM tournaments
+                WHERE pga_tournament_id = ${espn.espnId}"""
+            .query[(UUID, BigDecimal)].option
+        }
+      yield (seasonOpt, allGolfers, teams, rosters, tournamentRecords)).transact(xa)
+      (seasonOpt, allGolfers, teams, rosters, tournamentRecords) = dbState
+      rules = seasonOpt.map(_.seasonRules)
+        .getOrElse(SeasonRules.default)
       golferByEspnId = allGolfers.flatMap(g => g.pgaPlayerId.map(_ -> g)).toMap
       golferByName = allGolfers.map(g => (g.firstName.toLowerCase, g.lastName.toLowerCase) -> g).toMap
       golferByLastName = allGolfers.groupBy(_.lastName.toLowerCase)
       rostersByTeam = rosters.groupBy(_.teamId)
-      previews = tournaments.zip(tournamentRecords).map: (espn, tournamentRecord) =>
-        val isMajor = tournamentRecord.exists(_._2)
+      numPlaces = rules.payouts.size
+      previews = tournaments.zip(tournamentRecords).map { (espn, tournamentRecord) =>
+        val multiplier = tournamentRecord
+          .map(_._2).getOrElse(BigDecimal(1))
 
-        // Match ESPN competitors to our golfers (read-only, no auto-create)
-        val matchedCompetitors: List[(EspnCompetitor, Option[Golfer])] = espn.competitors.map: c =>
-          val golfer = golferByEspnId.get(c.espnId).orElse:
+        // Match ESPN competitors to our golfers
+        val matchedCompetitors: List[(EspnCompetitor, Option[Golfer])] = espn.competitors.map { c =>
+          val golfer = golferByEspnId.get(c.espnId).orElse {
             val parts = c.name.split("\\s+", 2)
             val (first, last) = if parts.length >= 2 then (parts(0), parts(1)) else ("", parts(0))
-            golferByName.get((first.toLowerCase, last.toLowerCase)).orElse:
-              golferByLastName.get(last.toLowerCase).flatMap:
+            golferByName.get((first.toLowerCase, last.toLowerCase)).orElse(
+              golferByLastName.get(last.toLowerCase).flatMap {
                 case g :: Nil => Some(g)
                 case _ => None
+              }
+            )
+          }
           (c, golfer)
+        }
 
-        // Build position -> tied count map
         val tiedCounts: Map[Int, Int] = espn.competitors
           .groupBy(_.position).view.mapValues(_.size).toMap
 
-        // Calculate per-team fantasy scores from live leaderboard
-        val teamPreviews = teams.map: team =>
+        val teamPreviews = teams.map { team =>
           val roster = rostersByTeam.getOrElse(team.id, Nil)
           val rosteredGolferIds = roster.map(r => r.golferId -> r).toMap
-          val golferEarnings = matchedCompetitors.flatMap: (competitor, golferOpt) =>
+          val golferEarnings = matchedCompetitors.flatMap { (competitor, golferOpt) =>
             for
               golfer <- golferOpt
               entry <- rosteredGolferIds.get(golfer.id)
-              if competitor.position <= 10
+              if competitor.position <= numPlaces
             yield
               val numTied = tiedCounts.getOrElse(competitor.position, 1)
-              val basePayout = PayoutTable.tieSplitPayout(competitor.position, numTied, isMajor)
+              val basePayout = PayoutTable.tieSplitPayout(competitor.position, numTied, multiplier, rules)
               val ownerPayout = basePayout * entry.ownershipPct / BigDecimal(100)
               PreviewGolferScore(
                 golferName = s"${golfer.firstName} ${golfer.lastName}",
@@ -140,6 +149,7 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
                 ownershipPct = entry.ownershipPct,
                 payout = ownerPayout
               )
+          }
           val topTens = golferEarnings.map(_.payout).sum
           PreviewTeamScore(
             teamId = team.id,
@@ -148,21 +158,22 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
             topTenEarnings = topTens,
             golferScores = golferEarnings
           )
+        }
 
-        // Compute zero-sum weekly totals
         val numTeams = teams.size
         val totalPot = teamPreviews.map(_.topTenEarnings).sum
-        val teamsWithWeekly = teamPreviews.map: tp =>
+        val teamsWithWeekly = teamPreviews.map { tp =>
           tp.copy(weeklyTotal = tp.topTenEarnings * numTeams - totalPot)
+        }
 
         EspnLivePreview(
           espnName = espn.name,
           espnId = espn.espnId,
           completed = espn.completed,
-          isMajor = isMajor,
+          payoutMultiplier = multiplier,
           totalCompetitors = espn.competitors.size,
           teams = teamsWithWeekly.sortBy(-_.weeklyTotal),
-          leaderboard = matchedCompetitors.sortBy(_._1.position).take(20).map: (c, gOpt) =>
+          leaderboard = matchedCompetitors.sortBy(_._1.position).take(20).map { (c, gOpt) =>
             PreviewLeaderboardEntry(
               name = c.name,
               position = c.position,
@@ -171,7 +182,9 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
               rostered = gOpt.exists(g => rosters.exists(_.golferId == g.id)),
               teamName = gOpt.flatMap(g => rosters.find(_.golferId == g.id).flatMap(r => teams.find(_.id == r.teamId).map(_.teamName)))
             )
+          }
         )
+      }
     yield previews
 
   /** Fetch the ESPN season calendar. */
@@ -323,7 +336,7 @@ case class EspnLivePreview(
     espnName: String,
     espnId: String,
     completed: Boolean,
-    isMajor: Boolean,
+    payoutMultiplier: BigDecimal,
     totalCompetitors: Int,
     teams: List[PreviewTeamScore],
     leaderboard: List[PreviewLeaderboardEntry]
