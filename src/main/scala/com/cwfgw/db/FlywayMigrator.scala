@@ -14,5 +14,6 @@ object FlywayMigrator:
         .dataSource(config.url, config.user, config.password)
         .locations("classpath:db/migration")
         .load()
+      flyway.repair()
       flyway.migrate().migrationsExecuted
     .flatTap(count => logger.info(s"Flyway applied $count migration(s)"))
