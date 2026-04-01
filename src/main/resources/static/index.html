@@ -26,7 +26,7 @@
         <button @click="page = 'rosters'" :class="page === 'rosters' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
                 class="px-3 py-1.5 rounded text-sm font-medium transition">Rosters</button>
         <button @click="page = 'rankings'; loadRankings()" :class="page === 'rankings' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
-                class="px-3 py-1.5 rounded text-sm font-medium transition">Rankings</button>
+                class="px-3 py-1.5 rounded text-sm font-medium transition">Team Standings</button>
         <button @click="page = 'sidebets'; loadReport()" :class="page === 'sidebets' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
                 class="px-3 py-1.5 rounded text-sm font-medium transition">Late Row Bets</button>
         <button @click="page = 'rules'" :class="page === 'rules' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
@@ -55,7 +55,7 @@
       <button @click="page = 'rosters'; mobileNav = false" :class="page === 'rosters' ? 'bg-gray-700 text-white' : 'text-gray-400'"
               class="px-3 py-2 rounded text-sm font-medium text-left">Rosters</button>
       <button @click="page = 'rankings'; loadRankings(); mobileNav = false" :class="page === 'rankings' ? 'bg-gray-700 text-white' : 'text-gray-400'"
-              class="px-3 py-2 rounded text-sm font-medium text-left">Rankings</button>
+              class="px-3 py-2 rounded text-sm font-medium text-left">Team Standings</button>
       <button @click="page = 'sidebets'; loadReport(); mobileNav = false" :class="page === 'sidebets' ? 'bg-gray-700 text-white' : 'text-gray-400'"
               class="px-3 py-2 rounded text-sm font-medium text-left">Late Row Bets</button>
       <button @click="page = 'rules'; mobileNav = false" :class="page === 'rules' ? 'bg-gray-700 text-white' : 'text-gray-400'"
@@ -439,7 +439,7 @@
       </div>
     </div>
 
-    <!-- RANKINGS PAGE -->
+    <!-- TEAM STANDINGS PAGE -->
     <div x-show="page === 'rankings'">
       <!-- Finalize season banner -->
       <div x-show="authenticated && allTournamentsCompleted() && currentSeasonStatus() !== 'completed'"
@@ -451,14 +451,27 @@
           <span x-show="finalizingSeason">Finalizing...</span>
         </button>
       </div>
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-xl font-bold">Team Rankings</h2>
-        <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h2 class="text-xl font-bold">Team Standings</h2>
+        <div class="flex flex-wrap items-center gap-3">
+          <select x-model="rankingsTournament" @change="loadRankings()"
+                  class="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm">
+            <option value="">All Tournaments</option>
+            <template x-for="t in tournaments" :key="t.id">
+              <option :value="t.id"
+                      x-text="'Wk ' + (t.metadata?.week || '?') + ' — ' + t.name + (t.status !== 'completed' ? ' (' + t.status + ')' : '')">
+              </option>
+            </template>
+          </select>
           <label class="flex items-center gap-2 text-sm">
             <input type="checkbox" x-model="rankingsLive" @change="loadRankings()"
                    class="rounded border-gray-600 bg-gray-700">
             <span class="text-gray-400">Live</span>
           </label>
+          <span x-show="rankings?.live"
+                class="text-xs bg-yellow-700/50 text-yellow-300 px-2 py-0.5 rounded">
+            LIVE — projected
+          </span>
           <span x-show="rankingsLoading" class="text-xs text-gray-500">Loading...</span>
         </div>
       </div>
@@ -508,7 +521,7 @@
       </template>
 
       <div x-show="!rankings && !rankingsLoading" class="text-center text-gray-500 py-12">
-        Loading rankings...
+        Loading standings...
       </div>
     </div>
 
@@ -1195,6 +1208,7 @@ TEAM 2 BURRELL
         finalizing: false,
         finalizingSeason: false,
         rankings: null,
+        rankingsTournament: '',
         rankingsLive: false,
         rankingsLoading: false,
         rankingsChart: null,
@@ -1581,8 +1595,12 @@ TEAM 2 BURRELL
 
         async loadRankings() {
           this.rankingsLoading = true;
-          const liveParam = this.rankingsLive ? '?live=true' : '';
-          const resp = await fetch(`/api/v1/seasons/${this.currentSeasonId}/rankings${liveParam}`);
+          const params = new URLSearchParams();
+          if (this.rankingsLive) params.set('live', 'true');
+          if (this.rankingsTournament) params.set('through', this.rankingsTournament);
+          const qs = params.toString();
+          const url = `/api/v1/seasons/${this.currentSeasonId}/rankings${qs ? '?' + qs : ''}`;
+          const resp = await fetch(url);
           if (resp.ok) {
             this.rankings = await resp.json();
             this.$nextTick(() => this.renderRankingsChart());

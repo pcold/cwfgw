@@ -527,7 +527,8 @@ class RouteTest extends FunSuite:
         ))
       override def getRankings(
           seasonId: UUID,
-          live: Boolean
+          live: Boolean,
+          throughTournamentId: Option[UUID]
       ): IO[Json] =
         IO.pure(Json.obj("teams" -> Json.arr()))
       override def getGolferHistory(

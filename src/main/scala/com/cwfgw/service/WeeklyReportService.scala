@@ -1,5 +1,6 @@
 package com.cwfgw.service
 
+import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.implicits.*
 import doobie.*
@@ -260,72 +261,84 @@ class WeeklyReportService(espnImportService: EspnImportService, xa: Transactor[I
       )
     action.transact(xa)
 
-  /** Rankings with historical cumulative totals per team across all tournaments. */
-  def getRankings(seasonId: UUID, live: Boolean = false): IO[Json] =
+  /** Rankings with historical cumulative totals per team
+    * through an optional tournament cutoff.
+    */
+  def getRankings(
+      seasonId: UUID,
+      live: Boolean = false,
+      throughTournamentId: Option[UUID] = None
+  ): IO[Json] =
     val action = for
       seasonOpt <- SeasonRepository.findById(seasonId)
       teams <- TeamRepository.findBySeason(seasonId)
-      allTournaments <- TournamentRepository.findAll(seasonId = None, status = Some("completed"))
+      completedTournaments <- TournamentRepository
+        .findAll(seasonId = None, status = Some("completed"))
       allRosters <- TeamRepository.getRosterBySeason(seasonId)
-      allScores <- allTournaments.flatTraverse(t => ScoreRepository.getScores(seasonId, t.id))
+      throughTournament <- throughTournamentId
+        .traverse(TournamentRepository.findById).map(_.flatten)
+
+      // Filter completed tournaments through the selected cutoff
+      includedTournaments = filterThroughTournament(
+        completedTournaments, throughTournament
+      )
+      allScores <- includedTournaments
+        .flatTraverse(t => ScoreRepository.getScores(seasonId, t.id))
 
       rules = seasonOpt.map(_.seasonRules).getOrElse(SeasonRules.default)
+      includedIds = includedTournaments.map(_.id).toSet
 
-      // Side bet cumulative per round for final totals
+      // Side bet cumulative — scoped to included tournaments only
       sideBetCumulative <- rules.sideBetRounds.traverse { round =>
         val roundPicks = allRosters.filter(_.draftRound.contains(round))
         roundPicks.traverse { entry =>
-          sql"""SELECT COALESCE(SUM(fs.points), 0)
-                FROM fantasy_scores fs
-                WHERE fs.season_id = $seasonId AND fs.team_id = ${entry.teamId} AND fs.golfer_id = ${entry.golferId}"""
-            .query[BigDecimal].unique.map(total => (entry.teamId, total * entry.ownershipPct / 100))
-        }.map(entries => (round, entries.map((tid, amt) => tid -> amt).toMap))
+          scopedSideBetTotal(
+            seasonId, entry.teamId, entry.golferId, includedIds
+          ).map(total =>
+            (entry.teamId, total * entry.ownershipPct / 100)
+          )
+        }.map(entries =>
+          (round, entries.map((tid, amt) => tid -> amt).toMap)
+        )
       }
 
-      // Find in-progress tournaments for live view
-      inProgressTournaments <- TournamentRepository.findAll(seasonId = None, status = Some("upcoming"))
-        .map(_ ++ allTournaments) // include completed for the query
-      upcomingAndInProgress <- TournamentRepository.findAll(seasonId = None, status = Some("in_progress"))
+      // Determine live candidate: if through-tournament is
+      // not completed, use it; otherwise auto-detect
+      inProgressTournaments <- TournamentRepository
+        .findAll(seasonId = None, status = Some("in_progress"))
     yield
+      val liveCandidate = throughTournament match
+        case Some(t) if t.status != "completed" => Some(t)
+        case None =>
+          inProgressTournaments.sortBy(_.startDate).headOption
+        case _ => None
+
       val numTeams = teams.size
       val sideBetPerTeam = rules.sideBetAmount
-      val sortedTournaments = allTournaments.sortBy(_.startDate)
+      val sorted = includedTournaments.sortBy(_.startDate)
 
-      // Compute side bet totals
-      val sideBetResults: Map[UUID, BigDecimal] =
-        val perRound = sideBetCumulative.map: (round, teamTotals) =>
-          if teamTotals.isEmpty || teamTotals.values.forall(_ == BigDecimal(0)) then Map.empty[UUID, BigDecimal]
-          else
-            val maxEarnings = teamTotals.values.max
-            val winners = teamTotals.filter(_._2 == maxEarnings).keys.toSet
-            val numWinners = winners.size
-            val winnerCollects = sideBetPerTeam * (numTeams - numWinners) / numWinners
-            teamTotals.map((tid, _) => if winners.contains(tid) then tid -> winnerCollects else tid -> -sideBetPerTeam)
-        perRound.foldLeft(Map.empty[UUID, BigDecimal]): (acc, roundMap) =>
-          roundMap.foldLeft(acc)((a, entry) => a.updated(entry._1, a.getOrElse(entry._1, BigDecimal(0)) + entry._2))
+      val sideBetResults = computeSideBets(
+        sideBetCumulative, numTeams, sideBetPerTeam
+      )
 
-      // Build cumulative weekly totals over time
-      val history = sortedTournaments.scanLeft(teams.map(t => t.id -> BigDecimal(0)).toMap): (cumulative, tournament) =>
-        val tScores = allScores.filter(_.tournamentId == tournament.id)
-        val teamTopTens = tScores.groupBy(_.teamId).view.mapValues(_.map(_.points).sum).toMap
-        val totalPot = teamTopTens.values.sum
-        teams.map: t =>
-          val weeklyTotal = teamTopTens.getOrElse(t.id, BigDecimal(0)) * numTeams - totalPot
-          t.id -> (cumulative.getOrElse(t.id, BigDecimal(0)) + weeklyTotal)
-        .toMap
-      .tail // drop the initial zeros
+      val history = buildCumulativeHistory(
+        sorted, allScores, teams, numTeams
+      )
 
-      val weekLabels = sortedTournaments.map(t => t.metadata.hcursor.downField("week").as[String].getOrElse(""))
-      val tournamentLabels = sortedTournaments.map(_.name)
+      val weekLabels = sorted.map(t =>
+        t.metadata.hcursor.downField("week")
+          .as[String].getOrElse("")
+      )
+      val tournamentLabels = sorted.map(_.name)
+      val currentTotals = history.lastOption
+        .getOrElse(teams.map(t => t.id -> BigDecimal(0)).toMap)
 
-      // Current totals (last point in history, or zeros if no tournaments)
-      val currentTotals = history.lastOption.getOrElse(teams.map(t => t.id -> BigDecimal(0)).toMap)
-
-      val teamRankings = teams.map: team =>
+      val teamRankings = teams.map { team =>
         val subtotal = currentTotals.getOrElse(team.id, BigDecimal(0))
         val sideBets = sideBetResults.getOrElse(team.id, BigDecimal(0))
         val totalCash = subtotal + sideBets
-        val seriesData = history.map(h => h.getOrElse(team.id, BigDecimal(0)))
+        val seriesData = history
+          .map(h => h.getOrElse(team.id, BigDecimal(0)))
         Json.obj(
           "team_id" -> team.id.asJson,
           "team_name" -> team.teamName.asJson,
@@ -334,10 +347,10 @@ class WeeklyReportService(espnImportService: EspnImportService, xa: Transactor[I
           "total_cash" -> totalCash.asJson,
           "series" -> seriesData.asJson
         )
-      .sortBy(t => t.hcursor.downField("total_cash").as[BigDecimal].getOrElse(BigDecimal(0))).reverse
-
-      // Find in-progress tournament for live option
-      val liveCandidate = upcomingAndInProgress.sortBy(_.startDate).headOption
+      }.sortBy(t =>
+        t.hcursor.downField("total_cash")
+          .as[BigDecimal].getOrElse(BigDecimal(0))
+      ).reverse
 
       (Json.obj(
         "teams" -> teamRankings.asJson,
@@ -347,41 +360,145 @@ class WeeklyReportService(espnImportService: EspnImportService, xa: Transactor[I
 
     action.transact(xa).flatMap: (baseRankings, liveCandidate) =>
       if live && liveCandidate.isDefined then
-        val tournament = liveCandidate.get
-        val teams = baseRankings.hcursor.downField("teams").as[List[Json]].getOrElse(Nil)
-        val numTeams = teams.size
-        espnImportService.previewByDate(seasonId, tournament.startDate).map: previews =>
-          previews.headOption match
-            case None => baseRankings
-            case Some(preview) =>
-              val totalPot = preview.teams.map(_.topTenEarnings).sum
-              val liveWeekly = preview.teams.map(t => t.teamId.toString -> (t.topTenEarnings * numTeams - totalPot)).toMap
-              val weekLabel = tournament.metadata.hcursor.downField("week").as[String].getOrElse("")
-
-              val updatedTeams = teams.map: t =>
-                val teamId = t.hcursor.downField("team_id").as[String].getOrElse("")
-                val subtotal = t.hcursor.downField("subtotal").as[BigDecimal].getOrElse(BigDecimal(0))
-                val sideBets = t.hcursor.downField("side_bets").as[BigDecimal].getOrElse(BigDecimal(0))
-                val liveWeeklyTotal = liveWeekly.getOrElse(teamId, BigDecimal(0))
-                val newSubtotal = subtotal + liveWeeklyTotal
-                val newTotal = newSubtotal + sideBets
-                val series = t.hcursor.downField("series").as[List[BigDecimal]].getOrElse(Nil)
-                t.mapObject(_
-                  .add("subtotal", newSubtotal.asJson)
-                  .add("total_cash", newTotal.asJson)
-                  .add("series", (series :+ newSubtotal).asJson)
-                  .add("live_weekly", liveWeeklyTotal.asJson))
-
-              val weeks = baseRankings.hcursor.downField("weeks").as[List[String]].getOrElse(Nil)
-              val names = baseRankings.hcursor.downField("tournament_names").as[List[String]].getOrElse(Nil)
-              val sortedTeams = updatedTeams.sortBy(t => t.hcursor.downField("total_cash").as[BigDecimal].getOrElse(BigDecimal(0))).reverse
-              baseRankings.mapObject(_
-                .add("teams", sortedTeams.asJson)
-                .add("weeks", (weeks :+ weekLabel).asJson)
-                .add("tournament_names", (names :+ (preview.espnName + " *")).asJson)
-                .add("live", Json.True))
-        .handleError(_ => baseRankings)
+        overlayLiveRankings(seasonId, baseRankings, liveCandidate.get)
       else IO.pure(baseRankings)
+
+  private def filterThroughTournament(
+      completed: List[Tournament],
+      through: Option[Tournament]
+  ): List[Tournament] =
+    through match
+      case None => completed
+      case Some(t) =>
+        completed.filter(_.startDate.compareTo(t.startDate) <= 0)
+
+  private def scopedSideBetTotal(
+      seasonId: UUID,
+      teamId: UUID,
+      golferId: UUID,
+      tournamentIds: Set[UUID]
+  ): ConnectionIO[BigDecimal] =
+    if tournamentIds.isEmpty then BigDecimal(0).pure[ConnectionIO]
+    else
+      val inClause = Fragments.in(
+        fr"fs.tournament_id",
+        cats.data.NonEmptyList.fromListUnsafe(tournamentIds.toList)
+      )
+      (fr"""SELECT COALESCE(SUM(fs.points), 0)
+            FROM fantasy_scores fs
+            WHERE fs.season_id = $seasonId
+              AND fs.team_id = $teamId
+              AND fs.golfer_id = $golferId
+              AND""" ++ inClause)
+        .query[BigDecimal].unique
+
+  private def computeSideBets(
+      sideBetCumulative: List[(Int, Map[UUID, BigDecimal])],
+      numTeams: Int,
+      sideBetPerTeam: BigDecimal
+  ): Map[UUID, BigDecimal] =
+    val perRound = sideBetCumulative.map: (_, teamTotals) =>
+      if teamTotals.isEmpty
+        || teamTotals.values.forall(_ == BigDecimal(0))
+      then Map.empty[UUID, BigDecimal]
+      else
+        val maxEarnings = teamTotals.values.max
+        val winners =
+          teamTotals.filter(_._2 == maxEarnings).keys.toSet
+        val numWinners = winners.size
+        val winnerCollects =
+          sideBetPerTeam * (numTeams - numWinners) / numWinners
+        teamTotals.map((tid, _) =>
+          if winners.contains(tid) then tid -> winnerCollects
+          else tid -> -sideBetPerTeam
+        )
+    perRound.foldLeft(Map.empty[UUID, BigDecimal]): (acc, roundMap) =>
+      roundMap.foldLeft(acc)((a, entry) =>
+        a.updated(
+          entry._1,
+          a.getOrElse(entry._1, BigDecimal(0)) + entry._2
+        )
+      )
+
+  private def buildCumulativeHistory(
+      sortedTournaments: List[Tournament],
+      allScores: List[FantasyScore],
+      teams: List[Team],
+      numTeams: Int
+  ): List[Map[UUID, BigDecimal]] =
+    sortedTournaments.scanLeft(
+      teams.map(t => t.id -> BigDecimal(0)).toMap
+    ) { (cumulative, tournament) =>
+      val tScores = allScores.filter(_.tournamentId == tournament.id)
+      val teamTopTens = tScores.groupBy(_.teamId).view
+        .mapValues(_.map(_.points).sum).toMap
+      val totalPot = teamTopTens.values.sum
+      teams.map { t =>
+        val weeklyTotal =
+          teamTopTens.getOrElse(t.id, BigDecimal(0)) * numTeams -
+            totalPot
+        t.id -> (cumulative.getOrElse(t.id, BigDecimal(0)) +
+          weeklyTotal)
+      }.toMap
+    }.tail
+
+  private def overlayLiveRankings(
+      seasonId: UUID,
+      baseRankings: Json,
+      tournament: Tournament
+  ): IO[Json] =
+    val teams = baseRankings.hcursor
+      .downField("teams").as[List[Json]].getOrElse(Nil)
+    val numTeams = teams.size
+    espnImportService
+      .previewByDate(seasonId, tournament.startDate)
+      .map { previews =>
+        previews.headOption match
+          case None => baseRankings
+          case Some(preview) =>
+            val totalPot = preview.teams.map(_.topTenEarnings).sum
+            val liveWeekly = preview.teams.map(t =>
+              t.teamId.toString ->
+                (t.topTenEarnings * numTeams - totalPot)
+            ).toMap
+            val weekLabel = tournament.metadata.hcursor
+              .downField("week").as[String].getOrElse("")
+
+            val updatedTeams = teams.map { t =>
+              val teamId = t.hcursor
+                .downField("team_id").as[String].getOrElse("")
+              val subtotal = t.hcursor.downField("subtotal")
+                .as[BigDecimal].getOrElse(BigDecimal(0))
+              val sideBets = t.hcursor.downField("side_bets")
+                .as[BigDecimal].getOrElse(BigDecimal(0))
+              val liveWeeklyTotal =
+                liveWeekly.getOrElse(teamId, BigDecimal(0))
+              val newSubtotal = subtotal + liveWeeklyTotal
+              val newTotal = newSubtotal + sideBets
+              val series = t.hcursor.downField("series")
+                .as[List[BigDecimal]].getOrElse(Nil)
+              t.mapObject(_
+                .add("subtotal", newSubtotal.asJson)
+                .add("total_cash", newTotal.asJson)
+                .add("series", (series :+ newSubtotal).asJson)
+                .add("live_weekly", liveWeeklyTotal.asJson))
+            }
+
+            val weeks = baseRankings.hcursor
+              .downField("weeks").as[List[String]].getOrElse(Nil)
+            val names = baseRankings.hcursor.downField("tournament_names")
+              .as[List[String]].getOrElse(Nil)
+            val sortedTeams = updatedTeams.sortBy(t =>
+              t.hcursor.downField("total_cash")
+                .as[BigDecimal].getOrElse(BigDecimal(0))
+            ).reverse
+            baseRankings.mapObject(_
+              .add("teams", sortedTeams.asJson)
+              .add("weeks", (weeks :+ weekLabel).asJson)
+              .add("tournament_names",
+                (names :+ (preview.espnName + " *")).asJson)
+              .add("live", Json.True))
+      }.handleError(_ => baseRankings)
 
   /** Overlay ESPN live preview data onto the base report.
     * Replaces per-golfer earnings with live projected payouts and recomputes

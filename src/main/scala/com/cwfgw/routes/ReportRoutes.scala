@@ -14,6 +14,9 @@ object ReportRoutes:
   private object LiveParam
       extends OptionalQueryParamDecoderMatcher[Boolean]("live")
 
+  private object ThroughTournamentParam
+      extends OptionalQueryParamDecoderMatcher[String]("through")
+
   def routes(service: WeeklyReportService): HttpRoutes[IO] =
     HttpRoutes.of[IO]:
       case GET -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "report" / UUIDVar(tournamentId)
@@ -25,8 +28,9 @@ object ReportRoutes:
           )
 
       case GET -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "rankings"
-          :? LiveParam(live) =>
-        service.getRankings(seasonId, live.getOrElse(false))
+          :? LiveParam(live) +& ThroughTournamentParam(through) =>
+        val throughId = through.map(UUID.fromString)
+        service.getRankings(seasonId, live.getOrElse(false), throughId)
           .flatMap(Ok(_))
           .handleErrorWith(e =>
             BadRequest(Json.obj("error" -> e.getMessage.asJson))
