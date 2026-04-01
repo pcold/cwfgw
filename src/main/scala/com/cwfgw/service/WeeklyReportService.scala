@@ -353,7 +353,7 @@ class WeeklyReportService(espnImportService: EspnImportService, xa: Transactor[I
         val sideBets = sideBetResults.getOrElse(team.id, BigDecimal(0))
         val totalCash = subtotal + sideBets
         val seriesData = history
-          .map(h => h.getOrElse(team.id, BigDecimal(0)))
+          .map(h => h.getOrElse(team.id, BigDecimal(0)) + sideBets)
         Json.obj(
           "team_id" -> team.id.asJson,
           "team_name" -> team.teamName.asJson,
@@ -495,7 +495,7 @@ class WeeklyReportService(espnImportService: EspnImportService, xa: Transactor[I
               t.mapObject(_
                 .add("subtotal", newSubtotal.asJson)
                 .add("total_cash", newTotal.asJson)
-                .add("series", (series :+ newSubtotal).asJson)
+                .add("series", (series :+ newTotal).asJson)
                 .add("live_weekly", liveWeeklyTotal.asJson))
             }
 
