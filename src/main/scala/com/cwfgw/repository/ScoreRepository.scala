@@ -29,7 +29,7 @@ object ScoreRepository:
   def getGolferSeasonScores(seasonId: UUID, golferId: UUID): ConnectionIO[List[(String, Int, BigDecimal, BigDecimal)]] =
     sql"""SELECT t.name,
                  COALESCE((MIN(fs.breakdown->>'position'))::int, 0),
-                 MIN(fs.points),
+                 SUM(fs.points),
                  COALESCE(MIN((fs.breakdown->>'base_payout')::numeric), 0)
           FROM fantasy_scores fs
           JOIN tournaments t ON fs.tournament_id = t.id
