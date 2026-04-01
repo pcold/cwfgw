@@ -232,11 +232,6 @@
           <span x-text="report?.tournament?.name"></span>
           <span x-show="report?.tournament?.payout_multiplier != 1" class="ml-1 text-yellow-300" x-text="'**' + report?.tournament?.payout_multiplier + 'x**'"></span>
         </div>
-        <div class="flex gap-4">
-          <template x-for="(s, i) in report?.standings_order?.slice(0, 5) || []" :key="s.team_name">
-            <span><span class="text-green-200" x-text="(i+1) + ')'"></span> <span x-text="s.team_name"></span></span>
-          </template>
-        </div>
       </div>
 
       <!-- The grid -->
