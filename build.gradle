@@ -54,6 +54,9 @@ dependencies {
     // Cloud SQL
     implementation 'com.google.cloud.sql:postgres-socket-factory:1.24.0'
 
+    // Auth
+    implementation 'org.mindrot:jbcrypt:0.4'
+
     // Config
     implementation 'com.github.pureconfig:pureconfig-core_3:0.17.8'
 

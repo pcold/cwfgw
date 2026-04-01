@@ -31,8 +31,10 @@
                 class="px-3 py-1.5 rounded text-sm font-medium transition">Late Row Bets</button>
         <button @click="page = 'rules'" :class="page === 'rules' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
                 class="px-3 py-1.5 rounded text-sm font-medium transition">Rules</button>
-        <button @click="page = 'admin'" :class="page === 'admin' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
+        <button @click="requireAuth('admin')" :class="page === 'admin' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'"
                 class="px-3 py-1.5 rounded text-sm font-medium transition">Admin</button>
+        <button x-show="authenticated" @click="doLogout()"
+                class="text-gray-500 hover:text-red-400 px-2 py-1.5 rounded text-xs font-medium transition ml-2">Logout</button>
       </div>
       <!-- Mobile hamburger -->
       <button @click="mobileNav = !mobileNav" class="md:hidden text-gray-400 hover:text-white p-1">
@@ -58,8 +60,10 @@
               class="px-3 py-2 rounded text-sm font-medium text-left">Late Row Bets</button>
       <button @click="page = 'rules'; mobileNav = false" :class="page === 'rules' ? 'bg-gray-700 text-white' : 'text-gray-400'"
               class="px-3 py-2 rounded text-sm font-medium text-left">Rules</button>
-      <button @click="page = 'admin'; mobileNav = false" :class="page === 'admin' ? 'bg-gray-700 text-white' : 'text-gray-400'"
+      <button @click="requireAuth('admin'); mobileNav = false" :class="page === 'admin' ? 'bg-gray-700 text-white' : 'text-gray-400'"
               class="px-3 py-2 rounded text-sm font-medium text-left">Admin</button>
+      <button x-show="authenticated" @click="doLogout(); mobileNav = false"
+              class="text-gray-500 hover:text-red-400 px-3 py-2 rounded text-xs font-medium text-left">Logout</button>
     </div>
   </nav>
 
@@ -82,7 +86,7 @@
       <div x-show="scoreboardData && tournaments.find(t => t.id === selectedTournament)?.status !== 'completed'"
            class="mb-4 px-4 py-2 bg-yellow-900/40 border border-yellow-700 rounded text-yellow-300 text-sm flex items-center justify-between">
         <span>Tournament in progress — scores are live estimates</span>
-        <button @click="finalizeTournament()" :disabled="finalizing"
+        <button x-show="authenticated" @click="finalizeTournament()" :disabled="finalizing"
                 class="ml-4 px-3 py-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded text-xs font-medium">
           <span x-show="!finalizing">Finalize Results</span>
           <span x-show="finalizing">Finalizing...</span>
@@ -942,6 +946,50 @@ TEAM 2 BURRELL
 
   </main>
 
+  <!-- Login Modal -->
+  <div x-show="showLoginModal" x-transition
+       class="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+       @keydown.escape.window="showLoginModal = false">
+    <div class="bg-gray-800 rounded-lg p-6 w-80 border border-gray-600"
+         @click.outside="showLoginModal = false">
+      <h3 class="text-lg font-bold mb-4">Admin Login</h3>
+      <form @submit.prevent="doLogin().then(() => {
+              if (authenticated && _pendingPage) {
+                page = _pendingPage;
+                _pendingPage = null;
+              }
+            })">
+        <div class="mb-3">
+          <label class="block text-xs text-gray-400 mb-1">Username</label>
+          <input type="text" x-model="loginUsername"
+                 class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-full"
+                 placeholder="Username">
+        </div>
+        <div class="mb-4">
+          <label class="block text-xs text-gray-400 mb-1">Password</label>
+          <input type="password" x-model="loginPassword"
+                 class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-full"
+                 placeholder="Password">
+        </div>
+        <span x-show="loginError" class="text-red-400 text-xs block mb-3"
+              x-text="loginError"></span>
+        <div class="flex gap-3">
+          <button type="submit" :disabled="loginLoading"
+                  class="bg-green-600 hover:bg-green-700 disabled:bg-gray-600
+                         text-white px-4 py-2 rounded text-sm font-medium flex-1">
+            <span x-show="!loginLoading">Log In</span>
+            <span x-show="loginLoading">...</span>
+          </button>
+          <button type="button" @click="showLoginModal = false"
+                  class="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2
+                         rounded text-sm font-medium">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
     const LEAGUE_ID = '11111111-1111-1111-1111-111111111111';
 
@@ -956,6 +1004,12 @@ TEAM 2 BURRELL
       return {
         page: 'standings',
         mobileNav: false,
+        authenticated: false,
+        loginUsername: '',
+        loginPassword: '',
+        loginError: '',
+        loginLoading: false,
+        showLoginModal: false,
         tournaments: [],
         selectedTournament: null,
         scoreboardData: null,
@@ -1002,7 +1056,54 @@ TEAM 2 BURRELL
 
         fmtMoney,
 
+        async checkAuth() {
+          try {
+            const resp = await fetch('/api/v1/auth/me');
+            const data = await resp.json();
+            this.authenticated = data.authenticated === true;
+          } catch { this.authenticated = false; }
+        },
+
+        async doLogin() {
+          this.loginLoading = true;
+          this.loginError = '';
+          try {
+            const resp = await fetch('/api/v1/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                username: this.loginUsername,
+                password: this.loginPassword
+              })
+            });
+            if (resp.ok) {
+              this.authenticated = true;
+              this.showLoginModal = false;
+              this.loginPassword = '';
+            } else {
+              this.loginError = 'Invalid credentials';
+            }
+          } catch (e) { this.loginError = e.message; }
+          this.loginLoading = false;
+        },
+
+        async doLogout() {
+          await fetch('/api/v1/auth/logout', { method: 'POST' });
+          this.authenticated = false;
+          if (this.page === 'admin') this.page = 'standings';
+        },
+
+        requireAuth(targetPage) {
+          if (this.authenticated) {
+            this.page = targetPage;
+          } else {
+            this.showLoginModal = true;
+            this._pendingPage = targetPage;
+          }
+        },
+
         async init() {
+          await this.checkAuth();
           await this.loadTournaments();
 
           // Auto-select the most recent completed or in-progress tournament
@@ -1102,7 +1203,16 @@ TEAM 2 BURRELL
           if (!this.selectedTournament) return;
           this.finalizing = true;
           try {
-            const resp = await fetch(`/api/v1/tournaments/${this.selectedTournament}/finalize`, { method: 'POST' });
+            const resp = await fetch(
+              `/api/v1/tournaments/${this.selectedTournament}/finalize`,
+              { method: 'POST' }
+            );
+            if (resp.status === 401) {
+              this.authenticated = false;
+              this.showLoginModal = true;
+              this.finalizing = false;
+              return;
+            }
             const data = await resp.json();
             if (resp.ok) {
               await this.loadTournaments();

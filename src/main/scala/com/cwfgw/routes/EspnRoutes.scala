@@ -62,37 +62,57 @@ object EspnRoutes:
     .asJson
   )
 
-  def routes(service: EspnImportService): HttpRoutes[IO] = HttpRoutes.of[IO]:
+  /** Public read-only routes. */
+  def routes(service: EspnImportService): HttpRoutes[IO] =
+    HttpRoutes.of[IO]:
+      case GET -> Root / "api" / "v1" / "espn" / "preview" / UUIDVar(leagueId)
+          :? DateParam(date) =>
+        service
+          .previewByDate(leagueId, date)
+          .flatMap(previews =>
+            Ok(Json.arr(previews.map(livePreviewToJson)*))
+          )
+          .handleErrorWith(e =>
+            BadRequest(Json.obj("error" -> e.getMessage.asJson))
+          )
 
-    // Live preview: GET /api/v1/espn/preview/:leagueId?date=2026-01-15
-    case GET -> Root / "api" / "v1" / "espn" / "preview" / UUIDVar(leagueId) :? DateParam(date) =>
-      service.previewByDate(leagueId, date)
-        .flatMap(previews => Ok(Json.arr(previews.map(livePreviewToJson)*)))
-        .handleErrorWith(e => BadRequest(Json.obj("error" -> e.getMessage.asJson)))
+      case GET -> Root / "api" / "v1" / "espn" / "calendar" =>
+        service.fetchCalendar
+          .flatMap: entries =>
+            Ok(Json.arr(entries.map(e =>
+              Json.obj(
+                "espn_id" -> e.id.asJson,
+                "name" -> e.label.asJson,
+                "start_date" -> e.startDate.asJson
+              )
+            )*))
+          .handleErrorWith(e =>
+            BadRequest(Json.obj("error" -> e.getMessage.asJson))
+          )
 
-    // Import completed results: POST /api/v1/espn/import?date=2026-01-15
-    case POST -> Root / "api" / "v1" / "espn" / "import" :? DateParam(date) =>
-      service.importByDate(date)
-        .flatMap(results => Ok(Json.arr(results.map(resultToJson)*)))
-        .handleErrorWith(e => BadRequest(Json.obj("error" -> e.getMessage.asJson)))
+  /** Admin-only import routes. */
+  def adminRoutes(service: EspnImportService): HttpRoutes[IO] =
+    HttpRoutes.of[IO]:
+      case POST -> Root / "api" / "v1" / "espn" / "import"
+          :? DateParam(date) =>
+        service
+          .importByDate(date)
+          .flatMap(results =>
+            Ok(Json.arr(results.map(resultToJson)*))
+          )
+          .handleErrorWith(e =>
+            BadRequest(Json.obj("error" -> e.getMessage.asJson))
+          )
 
-    // Import for a specific tournament: POST /api/v1/espn/import/tournament/:id
-    case POST -> Root / "api" / "v1" / "espn" / "import" / "tournament" / UUIDVar(tournamentId) =>
-      service.importForTournament(tournamentId).flatMap:
-        case Right(results) => Ok(Json.arr(results.map(resultToJson)*))
-        case Left(err) => BadRequest(Json.obj("error" -> err.asJson))
+      case POST -> Root / "api" / "v1" / "espn" / "import" / "tournament" / UUIDVar(tournamentId) =>
+        service.importForTournament(tournamentId).flatMap:
+          case Right(results) =>
+            Ok(Json.arr(results.map(resultToJson)*))
+          case Left(err) =>
+            BadRequest(Json.obj("error" -> err.asJson))
 
-    // ESPN season calendar: GET /api/v1/espn/calendar
-    case GET -> Root / "api" / "v1" / "espn" / "calendar" =>
-      service.fetchCalendar.flatMap: entries =>
-        Ok(Json.arr(entries.map(e => Json.obj(
-          "espn_id" -> e.id.asJson,
-          "name" -> e.label.asJson,
-          "start_date" -> e.startDate.asJson
-        ))*))
-      .handleErrorWith(e => BadRequest(Json.obj("error" -> e.getMessage.asJson)))
-
-  private object DateParam extends QueryParamDecoderMatcher[LocalDate]("date")
+  private object DateParam
+      extends QueryParamDecoderMatcher[LocalDate]("date")
 
   given QueryParamDecoder[LocalDate] =
     QueryParamDecoder[String].map(LocalDate.parse)
