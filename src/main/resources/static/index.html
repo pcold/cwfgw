@@ -1031,6 +1031,29 @@ TEAM 2 BURRELL
         <span x-show="resetMessage" class="block mt-3 text-sm" :class="resetError ? 'text-red-400' : 'text-green-400'" x-text="resetMessage"></span>
       </div>
 
+      <!-- Clean All Season Results -->
+      <div class="bg-gray-800 rounded-lg p-6 mb-6">
+        <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Clean All Season Results</h3>
+        <p class="text-xs text-gray-400 mb-4">Delete all scores, results, and standings for an entire season, resetting every tournament back to upcoming.</p>
+
+        <div class="flex items-center gap-4">
+          <select x-model="cleanSeasonId"
+                  class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm w-full sm:w-80">
+            <option value="">-- select season --</option>
+            <template x-for="s in seasons" :key="s.id">
+              <option :value="s.id" x-text="s.name"></option>
+            </template>
+          </select>
+          <button @click="cleanSeasonResults()"
+                  :disabled="cleaningSeason || !cleanSeasonId"
+                  class="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded text-sm font-medium transition whitespace-nowrap">
+            <span x-show="!cleaningSeason">Clean Results</span>
+            <span x-show="cleaningSeason">Cleaning...</span>
+          </button>
+        </div>
+        <span x-show="cleanMessage" class="block mt-3 text-sm" :class="cleanError ? 'text-red-400' : 'text-green-400'" x-text="cleanMessage"></span>
+      </div>
+
       <!-- Roster Confirm Result -->
       <div class="bg-gray-800 rounded-lg p-6" x-show="rosterResult">
         <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">Rosters Created</h3>
@@ -1219,6 +1242,12 @@ TEAM 2 BURRELL
         resettingTournament: false,
         resetMessage: '',
         resetError: false,
+
+        // Clean season state
+        cleanSeasonId: '',
+        cleaningSeason: false,
+        cleanMessage: '',
+        cleanError: false,
 
         // Roster view state
         rosterTeams: [],
@@ -1831,6 +1860,42 @@ TEAM 2 BURRELL
             this.resetError = true;
           }
           this.resettingTournament = false;
+        },
+
+        async cleanSeasonResults() {
+          if (!this.cleanSeasonId) return;
+          const season = this.seasons.find(
+            s => s.id === this.cleanSeasonId
+          );
+          const name = season ? season.name : this.cleanSeasonId;
+          if (!confirm(
+            `Are you sure you want to clean ALL results for "${name}"?\n\n` +
+            'This will delete every score, result, and standing ' +
+            'in this season and reset all tournaments to upcoming.'
+          )) return;
+          this.cleaningSeason = true;
+          this.cleanMessage = '';
+          this.cleanError = false;
+          try {
+            const resp = await fetch(
+              `/api/v1/seasons/${this.cleanSeasonId}/clean-results`,
+              { method: 'POST' }
+            );
+            const data = await resp.json();
+            if (resp.ok) {
+              this.cleanMessage = data.message;
+              this.cleanError = false;
+              this.cleanSeasonId = '';
+              await this.loadTournaments();
+            } else {
+              this.cleanMessage = data.error || 'Clean failed';
+              this.cleanError = true;
+            }
+          } catch (e) {
+            this.cleanMessage = e.message;
+            this.cleanError = true;
+          }
+          this.cleaningSeason = false;
         },
 
         async loadReport() {

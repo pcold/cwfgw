@@ -649,6 +649,12 @@ class RouteTest extends FunSuite:
         if seasonId == sampleId then
           IO.pure(Right("Season finalized"))
         else IO.pure(Left("Season not found"))
+      override def cleanSeasonResults(
+          seasonId: UUID
+      ): IO[Either[String, String]] =
+        if seasonId == sampleId then
+          IO.pure(Right("Season cleaned"))
+        else IO.pure(Left("Season not found"))
 
   private val tournamentRoutes =
     TournamentRoutes.routes(tournamentService).orNotFound
@@ -811,6 +817,36 @@ class RouteTest extends FunSuite:
       Method.POST,
       Uri.unsafeFromString(
         s"/api/v1/seasons/$otherId/finalize"
+      )
+    )
+    val response =
+      tournamentAdminRoutes.run(req).unsafeRunSync()
+    assertEquals(response.status, Status.BadRequest)
+  }
+
+  test("POST clean-results returns 200 on success") {
+    val req = Request[IO](
+      Method.POST,
+      Uri.unsafeFromString(
+        s"/api/v1/seasons/$sampleId/clean-results"
+      )
+    )
+    val response =
+      tournamentAdminRoutes.run(req).unsafeRunSync()
+    assertEquals(response.status, Status.Ok)
+    val body = response.as[Json].unsafeRunSync()
+    assert(
+      body.hcursor.downField("message").as[String].isRight
+    )
+  }
+
+  test("POST clean-results returns 400 on failure") {
+    val otherId =
+      UUID.fromString("22222222-2222-2222-2222-222222222222")
+    val req = Request[IO](
+      Method.POST,
+      Uri.unsafeFromString(
+        s"/api/v1/seasons/$otherId/clean-results"
       )
     )
     val response =

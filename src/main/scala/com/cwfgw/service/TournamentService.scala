@@ -170,6 +170,55 @@ class TournamentService(
                       .getOrElse(err.getClass.getSimpleName)
                   ))
 
+  /** Delete all results, scores, and standings for a season,
+    * resetting every tournament back to 'upcoming'.
+    */
+  def cleanSeasonResults(
+      seasonId: UUID
+  ): IO[Either[String, String]] =
+    SeasonRepository.findById(seasonId).transact(xa).flatMap:
+      case None => IO.pure(Left("Season not found"))
+      case Some(season) =>
+        val clean = for
+          _ <- logger.info(
+            s"Cleaning all results for season '${season.name}'..."
+          )
+          scores <- sql"""DELETE FROM fantasy_scores
+                          WHERE season_id = $seasonId"""
+            .update.run.transact(xa)
+          results <- sql"""DELETE FROM tournament_results
+                           WHERE tournament_id IN (
+                             SELECT id FROM tournaments
+                             WHERE season_id = $seasonId
+                           )""".update.run.transact(xa)
+          standings <- sql"""DELETE FROM season_standings
+                             WHERE season_id = $seasonId"""
+            .update.run.transact(xa)
+          tournaments <- sql"""UPDATE tournaments
+                               SET status = 'upcoming'
+                               WHERE season_id = $seasonId
+                                 AND status != 'upcoming'"""
+            .update.run.transact(xa)
+          _ <- logger.info(
+            s"Cleaned season '${season.name}': " +
+              s"$scores scores, $results results, " +
+              s"$standings standings, $tournaments tournaments reset"
+          )
+        yield Right(
+          s"Season '${season.name}' cleaned: " +
+            s"$scores scores, $results results, " +
+            s"$standings standings deleted; " +
+            s"$tournaments tournaments reset to upcoming"
+        )
+        clean.handleErrorWith: err =>
+          logger.error(err)(
+            s"Failed to clean season '${season.name}'"
+          ) >>
+            IO.pure(Left(
+              Option(err.getMessage)
+                .getOrElse(err.getClass.getSimpleName)
+            ))
+
   /** Finalize a season: all tournaments must be completed. */
   def finalizeSeason(
       seasonId: UUID

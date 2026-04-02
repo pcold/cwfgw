@@ -72,3 +72,10 @@ object TournamentRoutes:
             Ok(Json.obj("message" -> msg.asJson))
           case Left(err) =>
             BadRequest(Json.obj("error" -> err.asJson))
+
+      case POST -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "clean-results" =>
+        service.cleanSeasonResults(seasonId).flatMap:
+          case Right(msg) =>
+            Ok(Json.obj("message" -> msg.asJson))
+          case Left(err) =>
+            BadRequest(Json.obj("error" -> err.asJson))
