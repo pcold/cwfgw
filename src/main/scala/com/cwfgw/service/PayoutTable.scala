@@ -53,7 +53,7 @@ object PayoutTable:
       val sorted = owners.sortBy(-_._2)
       val rounded = sorted.init.map { (id, pct) =>
         id -> (basePayout * pct / 100)
-          .setScale(2, RoundingMode.HALF_UP)
+          .setScale(4, RoundingMode.HALF_UP)
       }
       val remainder = basePayout - rounded.map(_._2).sum
       (rounded :+ (sorted.last._1 -> remainder)).toMap
