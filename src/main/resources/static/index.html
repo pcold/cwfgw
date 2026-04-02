@@ -140,16 +140,16 @@
                   :class="team.weekly_total > 0 ? 'bg-green-900/10' : team.weekly_total < 0 ? 'bg-red-900/10' : ''">
                 <td class="px-4 py-3 text-gray-400" x-text="i + 1"></td>
                 <td class="px-4 py-3 font-medium" x-text="team.team_name"></td>
-                <td class="px-4 py-3 text-right font-mono" x-text="'$' + Number(team.top_ten_earnings).toFixed(2)"></td>
+                <td class="px-4 py-3 text-right font-mono" x-text="fmtMoney(team.top_ten_earnings)"></td>
                 <td class="px-4 py-3 text-right font-mono font-bold"
                     :class="team.weekly_total > 0 ? 'text-green-400' : team.weekly_total < 0 ? 'text-red-400' : 'text-gray-400'"
-                    x-text="(team.weekly_total >= 0 ? '+' : '') + '$' + Number(team.weekly_total).toFixed(2)"></td>
+                    x-text="(team.weekly_total >= 0 ? '+' : '') + fmtMoney(team.weekly_total)"></td>
                 <td class="px-4 py-3">
                   <template x-for="gs in team.golfer_scores" :key="gs.golfer_id">
                     <span class="inline-block mr-2 text-xs">
                       <span class="text-gray-300 cursor-pointer hover:underline" @click="showGolferHistory(gs.golfer_id)" x-text="gs.golfer_name"></span>
                       <span class="text-gray-500">T</span><span class="text-gray-400" x-text="gs.position"></span>
-                      <span class="text-green-400 font-mono" x-text="'$' + Number(gs.payout).toFixed(2)"></span>
+                      <span class="text-green-400 font-mono" x-text="fmtMoney(gs.payout)"></span>
                       <span x-show="gs.ownership_pct < 100" class="text-gray-500 text-xs" x-text="'(' + gs.ownership_pct + '%)'"></span>
                     </span>
                   </template>
@@ -159,6 +159,26 @@
             </template>
           </tbody>
         </table>
+      </div>
+
+      <!-- Zero-sum breakdown -->
+      <div class="mt-4 flex flex-wrap gap-4 text-sm" x-show="scoreboardTeams.length > 0"
+           x-data="{
+             get totalWon() { return scoreboardTeams.filter(t => t.weekly_total > 0).reduce((s, t) => s + Number(t.weekly_total), 0) },
+             get totalLost() { return scoreboardTeams.filter(t => t.weekly_total < 0).reduce((s, t) => s + Number(t.weekly_total), 0) }
+           }">
+        <div class="bg-gray-800 rounded-lg px-4 py-2 flex items-center gap-2">
+          <span class="text-gray-400">Won:</span>
+          <span class="font-mono font-bold text-green-400" x-text="fmtMoney(totalWon)"></span>
+        </div>
+        <div class="bg-gray-800 rounded-lg px-4 py-2 flex items-center gap-2">
+          <span class="text-gray-400">Lost:</span>
+          <span class="font-mono font-bold text-red-400" x-text="fmtMoney(totalLost)"></span>
+        </div>
+        <div class="bg-gray-800 rounded-lg px-4 py-2 flex items-center gap-2">
+          <span class="text-gray-400">Net:</span>
+          <span class="font-mono font-bold text-gray-400" x-text="fmtMoney(totalWon + totalLost)"></span>
+        </div>
       </div>
 
       <!-- Leaderboard -->
@@ -207,30 +227,24 @@
           <span x-show="finalizingSeason">Finalizing...</span>
         </button>
       </div>
-      <!-- Header: tournament selector + standings rank -->
-      <div class="mb-4 flex items-center gap-4 flex-wrap">
-        <select x-model="reportTournament" @change="loadReport()"
-                class="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm">
-          <template x-for="t in tournaments" :key="t.id">
-            <option :value="t.id" x-text="'Wk ' + (t.metadata?.week || '?') + ' — ' + t.name + (t.payout_multiplier != 1 ? ' ' + t.payout_multiplier + 'x' : '') + ' — ' + t.status"></option>
-          </template>
-        </select>
-        <label class="flex items-center gap-2 text-sm cursor-pointer select-none">
-          <input type="checkbox" x-model="reportLive" @change="loadReport()"
-                 class="rounded bg-gray-700 border-gray-600 text-green-500 focus:ring-green-500">
-          <span :class="reportLive ? 'text-yellow-300' : 'text-gray-400'">Live</span>
-        </label>
-        <span class="text-xs text-gray-500" x-show="reportLoading">Loading...</span>
-        <span x-show="report?.live" class="text-xs bg-yellow-700/50 text-yellow-300 px-2 py-0.5 rounded">LIVE — projected standings</span>
-      </div>
-
-      <!-- Report header bar (like PDF green bar) -->
-      <div class="bg-green-700 text-white px-4 py-2 rounded-t flex justify-between items-center text-xs font-bold" x-show="report">
-        <div>
-          <span x-text="'Week ' + (report?.tournament?.week || '?')"></span>
-          <span class="mx-2">|</span>
-          <span x-text="report?.tournament?.name"></span>
-          <span x-show="report?.tournament?.payout_multiplier != 1" class="ml-1 text-yellow-300" x-text="'**' + report?.tournament?.payout_multiplier + 'x**'"></span>
+      <!-- Header: title left, tournament selector right -->
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h2 class="text-xl font-bold">Weekly Report</h2>
+        <div class="flex flex-wrap items-center gap-3">
+          <select x-model="reportTournament" @change="loadReport()"
+                  class="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm">
+            <option value="">All Tournaments</option>
+            <template x-for="t in tournaments" :key="t.id">
+              <option :value="t.id" x-text="'Wk ' + (t.metadata?.week || '?') + ' — ' + t.name + (t.payout_multiplier != 1 ? ' ' + t.payout_multiplier + 'x' : '') + ' — ' + t.status"></option>
+            </template>
+          </select>
+          <label class="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <input type="checkbox" x-model="reportLive" @change="loadReport()"
+                   class="rounded bg-gray-700 border-gray-600 text-green-500 focus:ring-green-500">
+            <span :class="reportLive ? 'text-yellow-300' : 'text-gray-400'">Live</span>
+          </label>
+          <span x-show="report?.live" class="text-xs bg-yellow-700/50 text-yellow-300 px-2 py-0.5 rounded">LIVE — projected standings</span>
+          <span x-show="reportLoading" class="text-xs text-gray-500">Loading...</span>
         </div>
       </div>
 
@@ -267,11 +281,12 @@
                              x-text="team.rows[round-1].golfer_name + (team.rows[round-1].ownership_pct < 100 ? ' (' + team.rows[round-1].ownership_pct + '%)' : '')"></div>
                         <div class="font-mono"
                              :class="hasEarnings ? (isSideBetWinner ? 'text-green-400' : 'text-green-700') : 'text-gray-500'"
-                             x-text="hasEarnings ? (team.rows[round-1].position_str || '') + ' - $' + Number(team.rows[round-1].earnings).toFixed(2) : '-'">
+                             x-text="hasEarnings ? (team.rows[round-1].position_str || '') + ' - ' + fmtMoney(team.rows[round-1].earnings) : '-'">
                         </div>
                         <div class="font-semibold"
+                             x-show="report?.tournament?.status !== 'season'"
                              :class="hasEarnings && !isSideBetWinner ? 'text-black' : 'text-gray-200'"
-                             x-text="(team.rows[round-1].season_top_tens || 0) > 0 ? '$' + Number(team.rows[round-1].season_earnings || 0).toFixed(2) + ' (' + (team.rows[round-1].season_top_tens || 0) + ')' : '$0'">
+                             x-text="(team.rows[round-1].season_top_tens || 0) > 0 ? fmtMoney(team.rows[round-1].season_earnings || 0) + ' (' + (team.rows[round-1].season_top_tens || 0) + ')' : '$0'">
                         </div>
                       </div>
                     </template>
@@ -292,13 +307,14 @@
               <template x-for="team in report.teams" :key="'tt-' + team.team_id">
                 <td class="border border-gray-600 px-1 py-1.5 text-center font-mono"
                     :class="team.top_tens > 0 ? 'text-green-400' : 'text-gray-500'"
-                    x-text="'$' + Number(team.top_tens).toFixed(2)"></td>
+                    x-text="fmtMoney(team.top_tens)"></td>
               </template>
             </tr>
 
             <!-- **WEEKLY TOTAL row -->
             <tr class="bg-gray-700 font-bold">
-              <td class="border border-gray-600 px-1 py-1.5 text-center text-xs">**WEEKLY</td>
+              <td class="border border-gray-600 px-1 py-1.5 text-center text-xs"
+                  x-text="report?.tournament?.status === 'season' ? '**SEASON' : '**WEEKLY'"></td>
               <template x-for="team in report.teams" :key="'wt-' + team.team_id">
                 <td class="border border-gray-600 px-1 py-1.5 text-center font-mono"
                     :class="team.weekly_total > 0 ? 'text-green-400' : team.weekly_total < 0 ? 'text-red-400' : 'text-gray-500'"
@@ -361,9 +377,29 @@
         </template>
       </div>
 
+      <!-- Zero-sum breakdown -->
+      <div class="mt-4 flex flex-wrap gap-4 text-sm" x-show="report?.teams?.length > 0"
+           x-data="{
+             get totalWon() { return (report?.teams || []).filter(t => t.total_cash > 0).reduce((s, t) => s + Number(t.total_cash), 0) },
+             get totalLost() { return (report?.teams || []).filter(t => t.total_cash < 0).reduce((s, t) => s + Number(t.total_cash), 0) }
+           }">
+        <div class="bg-gray-800 rounded-lg px-4 py-2 flex items-center gap-2">
+          <span class="text-gray-400">Won:</span>
+          <span class="font-mono font-bold text-green-400" x-text="fmtMoney(totalWon)"></span>
+        </div>
+        <div class="bg-gray-800 rounded-lg px-4 py-2 flex items-center gap-2">
+          <span class="text-gray-400">Lost:</span>
+          <span class="font-mono font-bold text-red-400" x-text="fmtMoney(totalLost)"></span>
+        </div>
+        <div class="bg-gray-800 rounded-lg px-4 py-2 flex items-center gap-2">
+          <span class="text-gray-400">Net:</span>
+          <span class="font-mono font-bold text-gray-400" x-text="fmtMoney(totalWon + totalLost)"></span>
+        </div>
+      </div>
+
       <!-- No data state -->
       <div x-show="!report && !reportLoading" class="text-center text-gray-500 py-12">
-        Select a tournament to view the weekly report
+        Select a season to view standings
       </div>
     </div>
 
@@ -522,15 +558,26 @@
 
     <!-- SIDE BETS PAGE -->
     <div x-show="page === 'sidebets'">
-      <h2 class="text-xl font-bold mb-4">Round 5-8 Late Row Bets</h2>
-      <p class="text-gray-400 text-sm mb-4">$15 per team per round. Highest cumulative earner in each draft round (5-8) wins $15 from every other team.</p>
-
-      <template x-if="!report">
-        <div class="text-gray-500">
-          <p>Load a weekly report first to see late row bet detail.</p>
-          <button @click="page = 'standings'; loadReport()" class="mt-2 px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm">Load Report</button>
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h2 class="text-xl font-bold">Round 5-8 Late Row Bets</h2>
+        <div class="flex flex-wrap items-center gap-3">
+          <select x-model="reportTournament" @change="loadReport()"
+                  class="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm">
+            <option value="">All Tournaments</option>
+            <template x-for="t in tournaments" :key="t.id">
+              <option :value="t.id" x-text="'Wk ' + (t.metadata?.week || '?') + ' — ' + t.name + (t.payout_multiplier != 1 ? ' ' + t.payout_multiplier + 'x' : '') + ' — ' + t.status"></option>
+            </template>
+          </select>
+          <label class="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <input type="checkbox" x-model="reportLive" @change="loadReport()"
+                   class="rounded bg-gray-700 border-gray-600 text-green-500 focus:ring-green-500">
+            <span :class="reportLive ? 'text-yellow-300' : 'text-gray-400'">Live</span>
+          </label>
+          <span x-show="report?.live" class="text-xs bg-yellow-700/50 text-yellow-300 px-2 py-0.5 rounded">LIVE — projected</span>
+          <span x-show="reportLoading" class="text-xs text-gray-500">Loading...</span>
         </div>
-      </template>
+      </div>
+      <p class="text-gray-400 text-sm mb-4">$15 per team per round. Highest cumulative earner in each draft round (5-8) wins $15 from every other team.</p>
 
       <template x-if="report && report.side_bet_detail">
         <div class="space-y-6">
@@ -586,6 +633,26 @@
                   </template>
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <!-- Zero-sum breakdown -->
+          <div class="mt-4 flex flex-wrap gap-4 text-sm"
+               x-data="{
+                 get totalWon() { return (report?.teams || []).filter(t => t.side_bets > 0).reduce((s, t) => s + Number(t.side_bets), 0) },
+                 get totalLost() { return (report?.teams || []).filter(t => t.side_bets < 0).reduce((s, t) => s + Number(t.side_bets), 0) }
+               }">
+            <div class="bg-gray-800 rounded-lg px-4 py-2 flex items-center gap-2">
+              <span class="text-gray-400">Won:</span>
+              <span class="font-mono font-bold text-green-400" x-text="fmtMoney(totalWon)"></span>
+            </div>
+            <div class="bg-gray-800 rounded-lg px-4 py-2 flex items-center gap-2">
+              <span class="text-gray-400">Lost:</span>
+              <span class="font-mono font-bold text-red-400" x-text="fmtMoney(totalLost)"></span>
+            </div>
+            <div class="bg-gray-800 rounded-lg px-4 py-2 flex items-center gap-2">
+              <span class="text-gray-400">Net:</span>
+              <span class="font-mono font-bold text-gray-400" x-text="fmtMoney(totalWon + totalLost)"></span>
             </div>
           </div>
         </div>
@@ -1123,6 +1190,7 @@ TEAM 2 BURRELL
                 </tbody>
               </table>
               <p x-show="!golferModal.results?.length" class="text-gray-500 text-center py-4">No top 10 finishes this season</p>
+              <p class="text-gray-500 text-xs italic mt-3">Finalized results only. Does not include live projections or shared ownership splits.</p>
             </div>
           </template>
         </div>
@@ -1176,11 +1244,20 @@ TEAM 2 BURRELL
   </div>
 
   <script>
-    function fmtMoney(val) {
+    function fmtMoney(val, decimals) {
       const n = Number(val);
       if (n === 0) return '$0';
       const sign = n < 0 ? '-' : '';
-      return sign + '$' + Math.abs(n).toFixed(2);
+      if (decimals === undefined) {
+        const cents = Math.abs(n) * 100;
+        if (Math.abs(cents - Math.round(cents)) < 0.001) {
+          decimals = 2;
+        } else {
+          const mils = Math.abs(n) * 1000;
+          decimals = Math.abs(mils - Math.round(mils)) < 0.001 ? 3 : 4;
+        }
+      }
+      return sign + '$' + Math.abs(n).toFixed(decimals);
     }
 
     function app() {
@@ -1211,7 +1288,7 @@ TEAM 2 BURRELL
         golferModal: null,
         golferModalLoading: false,
         report: null,
-        reportTournament: null,
+        reportTournament: '',
         reportLive: false,
         reportLoading: false,
 
@@ -1425,10 +1502,10 @@ TEAM 2 BURRELL
             || this.tournaments[0];
           if (current) {
             this.selectedTournament = current.id;
-            this.reportTournament = current.id;
             this.loadScoreboard();
-            this.loadReport();
           }
+          this.reportTournament = '';
+          this.loadReport();
         },
 
         async loadTournaments() {
@@ -1899,12 +1976,15 @@ TEAM 2 BURRELL
         },
 
         async loadReport() {
-          if (!this.reportTournament) return;
+          if (!this.currentSeasonId) return;
           this.reportLoading = true;
           this.report = null;
 
           const liveParam = this.reportLive ? '?live=true' : '';
-          const resp = await fetch(`/api/v1/seasons/${this.currentSeasonId}/report/${this.reportTournament}${liveParam}`);
+          const path = this.reportTournament
+            ? `/api/v1/seasons/${this.currentSeasonId}/report/${this.reportTournament}${liveParam}`
+            : `/api/v1/seasons/${this.currentSeasonId}/report${liveParam}`;
+          const resp = await fetch(path);
           if (resp.ok) {
             this.report = await resp.json();
           }
