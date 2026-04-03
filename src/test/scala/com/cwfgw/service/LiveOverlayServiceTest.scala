@@ -11,7 +11,7 @@ import java.time.{Instant, LocalDate}
 
 import com.cwfgw.domain.SeasonRules
 
-/** Tests for WeeklyReportService.mergeLiveData and
+/** Tests for LiveOverlayService.mergeLiveData and
   * overlayPriorLivePreview — pure typed transformations
   * that overlay ESPN live data onto a base report.
   *
@@ -19,12 +19,12 @@ import com.cwfgw.domain.SeasonRules
   * objects, then verify the merged output has correct
   * weekly totals, subtotals, and rankings.
   */
-class WeeklyReportServiceTest extends FunSuite:
+class LiveOverlayServiceTest extends FunSuite:
 
   private given LoggerFactory[IO] = NoOpFactory[IO]
 
-  private val service = new WeeklyReportService(
-    espnImportService = null, xa = null
+  private val service = new LiveOverlayService(
+    espnImportService = null
   )
 
   // ---- IDs ----
@@ -1231,9 +1231,9 @@ class WeeklyReportServiceTest extends FunSuite:
     val week8a = mkTournament("Week 8A", "2026-03-05")
     val week8b = mkTournament("Week 8B", "2026-03-05")
 
-    assert(service.tBefore(week8a, week8b))
-    assert(!service.tBefore(week8b, week8a))
-    assert(!service.tBefore(week8a, week8a))
+    assert(ReportHelpers.tBefore(week8a, week8b))
+    assert(!ReportHelpers.tBefore(week8b, week8a))
+    assert(!ReportHelpers.tBefore(week8a, week8a))
   }
 
   test("tBefore orders different-date " +
@@ -1241,17 +1241,17 @@ class WeeklyReportServiceTest extends FunSuite:
     val week7 = mkTournament("Week 7", "2026-02-26")
     val week8a = mkTournament("Week 8A", "2026-03-05")
 
-    assert(service.tBefore(week7, week8a))
-    assert(!service.tBefore(week8a, week7))
+    assert(ReportHelpers.tBefore(week7, week8a))
+    assert(!ReportHelpers.tBefore(week8a, week7))
   }
 
   test("tOnOrBefore includes same tournament") {
     val week8a = mkTournament("Week 8A", "2026-03-05")
     val week8b = mkTournament("Week 8B", "2026-03-05")
 
-    assert(service.tOnOrBefore(week8a, week8a))
-    assert(service.tOnOrBefore(week8a, week8b))
-    assert(!service.tOnOrBefore(week8b, week8a))
+    assert(ReportHelpers.tOnOrBefore(week8a, week8a))
+    assert(ReportHelpers.tOnOrBefore(week8a, week8b))
+    assert(!ReportHelpers.tOnOrBefore(week8b, week8a))
   }
 
   test("filterThroughTournament includes 8A " +
@@ -1261,7 +1261,7 @@ class WeeklyReportServiceTest extends FunSuite:
     val week8b = mkTournament("Week 8B", "2026-03-05")
     val all = List(week7, week8a, week8b)
 
-    val through8a = service.filterThroughTournament(
+    val through8a = ReportHelpers.filterThroughTournament(
       all, Some(week8a)
     )
     assertEquals(
@@ -1277,7 +1277,7 @@ class WeeklyReportServiceTest extends FunSuite:
     val week8b = mkTournament("Week 8B", "2026-03-05")
     val all = List(week7, week8a, week8b)
 
-    val through8b = service.filterThroughTournament(
+    val through8b = ReportHelpers.filterThroughTournament(
       all, Some(week8b)
     )
     assertEquals(
@@ -1292,6 +1292,6 @@ class WeeklyReportServiceTest extends FunSuite:
     val week8a = mkTournament("Week 8A", "2026-03-05")
     val all = List(week7, week8a)
 
-    val result = service.filterThroughTournament(all, None)
+    val result = ReportHelpers.filterThroughTournament(all, None)
     assertEquals(result.size, 2)
   }

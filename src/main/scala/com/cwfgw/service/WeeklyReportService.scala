@@ -9,8 +9,9 @@ import doobie.*
 import doobie.implicits.*
 import org.typelevel.log4cats.LoggerFactory
 
-import java.time.LocalDate
 import java.util.UUID
+
+import ReportHelpers.*
 
 /** Assembles the full weekly report data matching the
   * PDF layout. Returns a grid: 13 team columns x 8 draft
@@ -22,102 +23,9 @@ import java.util.UUID
   * in-progress tournaments to show projected standings.
   */
 class WeeklyReportService(
-  espnImportService: EspnImportService,
+  liveOverlay: LiveOverlayService,
   xa: Transactor[IO]
 )(using LoggerFactory[IO]):
-
-  private val logger = LoggerFactory[IO].getLogger
-
-  /** Context needed to recompute side bets during live
-    * overlay.
-    */
-  private case class RankingsContext(
-    allRosters: List[RosterEntry],
-    rules: SeasonRules,
-    sideBetCumulative: List[(Int, Map[UUID, BigDecimal])],
-    numTeams: Int
-  )
-
-  /** Orders tournaments by (startDate, name) to handle
-    * same-date multi-events like Week 8A / 8B.
-    */
-  private val tournamentOrd: Ordering[Tournament] =
-    Ordering.by(t => (t.startDate, t.name))
-
-  /** Finds the preview matching a tournament by ESPN ID. */
-  private def matchPreview(
-    previews: List[EspnLivePreview],
-    tournament: Tournament
-  ): Option[EspnLivePreview] =
-    tournament.pgaTournamentId match
-      case Some(pgaId) =>
-        previews.find(_.espnId == pgaId)
-          .orElse(previews.headOption)
-      case None => previews.headOption
-
-  /** True when `a` precedes `b` in tournament order. */
-  private[service] def tBefore(
-    a: Tournament,
-    b: Tournament
-  ): Boolean = tournamentOrd.lt(a, b)
-
-  /** True when `a` precedes or equals `b` in tournament
-    * order.
-    */
-  private[service] def tOnOrBefore(
-    a: Tournament,
-    b: Tournament
-  ): Boolean = tournamentOrd.lteq(a, b)
-
-  // --------------------------------------------------
-  // Shared helpers
-  // --------------------------------------------------
-
-  /** Build standings from a list of team columns sorted by
-    * totalCash descending.
-    */
-  private def buildStandingsOrder(
-    teams: List[ReportTeamColumn]
-  ): List[StandingsEntry] =
-    teams.sortBy(_.totalCash).reverse.zipWithIndex.map {
-      (t, i) =>
-        StandingsEntry(i + 1, t.teamName, t.totalCash)
-    }
-
-  /** Compute side bet round payouts from a map of
-    * teamId -> cumulative earnings. Returns the updated
-    * entries list with recomputed payouts.
-    */
-  private def recomputeSideBetPayouts(
-    entries: List[ReportSideBetTeamEntry],
-    numTeams: Int,
-    sideBetPerTeam: BigDecimal
-  ): List[ReportSideBetTeamEntry] =
-    val teamEarnings = entries.map(e =>
-      e.teamId -> e.cumulativeEarnings
-    ).toMap
-    val allZero =
-      teamEarnings.values.forall(_ == BigDecimal(0))
-    if allZero then entries.map(_.copy(payout = BigDecimal(0)))
-    else
-      val maxE = teamEarnings.values.max
-      val winners =
-        teamEarnings.filter(_._2 == maxE).keys.toSet
-      val nw = winners.size
-      val winnerCollects =
-        sideBetPerTeam * (numTeams - nw) / nw
-      entries.map { e =>
-        val payout =
-          if winners.contains(e.teamId) then winnerCollects
-          else -sideBetPerTeam
-        e.copy(payout = payout)
-      }
-
-  /** Format a score-to-par integer as a display string. */
-  private def formatStp(s: Int): String =
-    if s == 0 then "E"
-    else if s > 0 then s"+$s"
-    else s.toString
 
   // --------------------------------------------------
   // getReport
@@ -245,49 +153,10 @@ class WeeklyReportService(
     action.transact(xa).flatMap {
       (baseReport, txRules, priorNonCompleted, selTournament) =>
         if !live then IO.pure(baseReport)
-        else
-          val withPrior = priorNonCompleted
-            .sorted(tournamentOrd)
-            .foldLeft(IO.pure(baseReport)) { (accIO, t) =>
-              accIO.flatMap { acc =>
-                espnImportService
-                  .previewByDate(seasonId, t.startDate)
-                  .map { previews =>
-                    matchPreview(previews, t)
-                      .map(overlayPriorLivePreview(
-                        acc, _, txRules
-                      ))
-                      .getOrElse(acc)
-                  }
-                  .handleErrorWith { e =>
-                    logger.warn(e)(
-                      s"Prior live overlay failed: ${t.name}"
-                    ).as(acc)
-                  }
-              }
-            }
-          val status = baseReport.tournament.status
-            .getOrElse("")
-          if status != "completed" then
-            val startDate = baseReport.tournament.startDate
-              .getOrElse("")
-            if startDate.isEmpty then withPrior
-            else
-              withPrior.flatMap { rpt =>
-                espnImportService.previewByDate(
-                  seasonId, LocalDate.parse(startDate)
-                ).map { previews =>
-                  val matched = selTournament
-                    .flatMap(matchPreview(previews, _))
-                    .toList
-                  mergeLiveData(rpt, matched, txRules)
-                }.handleErrorWith { e =>
-                  logger.warn(e)(
-                    s"Live overlay failed for $tournamentId"
-                  ).as(rpt)
-                }
-              }
-          else withPrior
+        else liveOverlay.overlayReport(
+          seasonId, baseReport, txRules,
+          priorNonCompleted, selTournament, tournamentId
+        )
     }
 
   /** Build prior weekly zero-sum totals for tournaments
@@ -613,37 +482,7 @@ class WeeklyReportService(
 
     action.transact(xa).flatMap {
       (baseReport, rules, nonCompleted) =>
-        if live && nonCompleted.nonEmpty then
-          val sorted = nonCompleted.sorted(tournamentOrd)
-          logger.info(
-            s"Season report live overlay: " +
-            s"${sorted.size} non-completed tournaments"
-          ) >>
-            sorted.foldLeft(IO.pure(baseReport)) {
-              (accIO, tournament) =>
-                accIO.flatMap { acc =>
-                  espnImportService.previewByDate(
-                    seasonId, tournament.startDate
-                  ).map { previews =>
-                    val matched = matchPreview(
-                      previews, tournament
-                    ).toList
-                    mergeLiveData(
-                      acc, matched, rules, additive = true
-                    )
-                  }.handleErrorWith { e =>
-                    logger.warn(e)(
-                      s"Live overlay failed for " +
-                      s"${tournament.name}"
-                    ).as(acc)
-                  }
-                }
-            }
-        else if live then
-          logger.info(
-            "Season report: live requested but " +
-            "no non-completed tournaments found"
-          ).as(baseReport)
+        if live then liveOverlay.overlaySeasonReport(seasonId, baseReport, rules, nonCompleted)
         else IO.pure(baseReport)
     }
 
@@ -923,7 +762,7 @@ class WeeklyReportService(
         val sorted =
           includedTournaments.sorted(tournamentOrd)
 
-        val sideBetResults = computeSideBets(
+        val sideBetResults = liveOverlay.computeSideBets(
           sideBetCumulative, numTeams, sideBetPerTeam
         )
 
@@ -970,24 +809,10 @@ class WeeklyReportService(
     action.transact(xa).flatMap {
       (baseRankings, liveCandidates, ctx) =>
         if live && liveCandidates.nonEmpty then
-          liveCandidates.foldLeft(
-            IO.pure((baseRankings, ctx))
-          ) { (accIO, tournament) =>
-            accIO.flatMap { (acc, accCtx) =>
-              overlayLiveRankings(
-                seasonId, acc, tournament, accCtx
-              )
-            }
-          }.map(_._1)
+          liveOverlay.overlayRankings(seasonId, baseRankings, liveCandidates, ctx)
         else IO.pure(baseRankings)
     }
 
-  private[service] def filterThroughTournament(
-    completed: List[Tournament],
-    through: Option[Tournament]
-  ): List[Tournament] = through match
-    case None    => completed
-    case Some(t) => completed.filter(tOnOrBefore(_, t))
 
   // --------------------------------------------------
   // DB helpers (unchanged)
@@ -1005,40 +830,6 @@ class WeeklyReportService(
         ScoreRepository.golferPointTotalScoped(
           seasonId, teamId, golferId, ids
         )
-
-  private def computeSideBets(
-    sideBetCumulative: List[(Int, Map[UUID, BigDecimal])],
-    numTeams: Int,
-    sideBetPerTeam: BigDecimal
-  ): Map[UUID, BigDecimal] =
-    val perRound = sideBetCumulative.map {
-      (_, teamTotals) =>
-        if teamTotals.isEmpty ||
-          teamTotals.values.forall(_ == BigDecimal(0))
-        then Map.empty[UUID, BigDecimal]
-        else
-          val maxEarnings = teamTotals.values.max
-          val winners = teamTotals
-            .filter(_._2 == maxEarnings).keys.toSet
-          val numWinners = winners.size
-          val winnerCollects =
-            sideBetPerTeam * (numTeams - numWinners) /
-            numWinners
-          teamTotals.map { (tid, _) =>
-            if winners.contains(tid) then
-              tid -> winnerCollects
-            else tid -> -sideBetPerTeam
-          }
-    }
-    perRound.foldLeft(Map.empty[UUID, BigDecimal]) {
-      (acc, roundMap) =>
-        roundMap.foldLeft(acc) { (a, entry) =>
-          a.updated(
-            entry._1,
-            a.getOrElse(entry._1, BigDecimal(0)) + entry._2
-          )
-        }
-    }
 
   private def buildCumulativeHistory(
     sortedTournaments: List[Tournament],
@@ -1064,374 +855,3 @@ class WeeklyReportService(
           ) + weeklyTotal)
         }.toMap
       }.tail
-
-  // --------------------------------------------------
-  // Live overlay: rankings
-  // --------------------------------------------------
-
-  private def overlayLiveRankings(
-    seasonId: UUID,
-    baseRankings: Rankings,
-    tournament: Tournament,
-    ctx: RankingsContext
-  ): IO[(Rankings, RankingsContext)] =
-    val numTeams = ctx.numTeams
-    espnImportService.previewByDate(
-      seasonId, tournament.startDate
-    ).map { previews =>
-      matchPreview(previews, tournament) match
-        case None => (baseRankings, ctx)
-        case Some(preview) =>
-          val totalPot =
-            preview.teams.map(_.topTenEarnings).sum
-          val liveWeekly = preview.teams.map { t =>
-            t.teamId ->
-              (t.topTenEarnings * numTeams - totalPot)
-          }.toMap
-          val weekLabel = tournament.week.getOrElse("")
-
-          val liveByGolfer = preview.teams.flatMap { t =>
-            t.golferScores.map(gs =>
-              (t.teamId, gs.golferId) -> gs.payout
-            )
-          }.toMap
-
-          val updatedCumulative =
-            ctx.sideBetCumulative.map { (round, teamTotals) =>
-              val withLive = ctx.allRosters
-                .filter(_.draftRound.contains(round))
-                .foldLeft(teamTotals) { (acc, entry) =>
-                  val liveEarnings = liveByGolfer.getOrElse(
-                    (entry.teamId, entry.golferId),
-                    BigDecimal(0)
-                  )
-                  val adjusted =
-                    liveEarnings * entry.ownershipPct / 100
-                  if adjusted == BigDecimal(0) then acc
-                  else acc.updated(
-                    entry.teamId,
-                    acc.getOrElse(
-                      entry.teamId, BigDecimal(0)
-                    ) + adjusted
-                  )
-                }
-              (round, withLive)
-            }
-          val newSideBets = computeSideBets(
-            updatedCumulative, numTeams,
-            ctx.rules.sideBetAmount
-          )
-
-          val updatedTeams = baseRankings.teams.map { t =>
-            val subtotal = t.subtotal
-            val sideBets = newSideBets
-              .getOrElse(t.teamId, BigDecimal(0))
-            val liveWeeklyTotal = liveWeekly
-              .getOrElse(t.teamId, BigDecimal(0))
-            val newSubtotal = subtotal + liveWeeklyTotal
-            val newTotal = newSubtotal + sideBets
-            t.copy(
-              subtotal = newSubtotal,
-              sideBets = sideBets,
-              totalCash = newTotal,
-              series = t.series :+ newTotal,
-              liveWeekly = Some(liveWeeklyTotal)
-            )
-          }.sortBy(_.totalCash).reverse
-
-          val updatedRankings = baseRankings.copy(
-            teams = updatedTeams,
-            weeks =
-              baseRankings.weeks :+ weekLabel,
-            tournamentNames =
-              baseRankings.tournamentNames :+
-              (preview.espnName + " *"),
-            live = Some(true)
-          )
-          (updatedRankings,
-            ctx.copy(
-              sideBetCumulative = updatedCumulative
-            ))
-    }.handleError(_ => (baseRankings, ctx))
-
-  // --------------------------------------------------
-  // Live overlay: prior tournament onto report
-  // --------------------------------------------------
-
-  /** Overlay a prior non-completed tournament's ESPN data
-    * onto a report. Adds the tournament's zero-sum totals
-    * to `previous` and live golfer earnings to
-    * `seasonEarnings`/`seasonTopTens`. Does NOT modify
-    * per-golfer `earnings` (those belong to the selected
-    * tournament). Also updates side bet cumulative data.
-    */
-  private[service] def overlayPriorLivePreview(
-    report: WeeklyReport,
-    preview: EspnLivePreview,
-    rules: SeasonRules
-  ): WeeklyReport =
-    val numTeams = report.teams.size
-    if numTeams == 0 then report
-    else
-      val totalPot =
-        preview.teams.map(_.topTenEarnings).sum
-      val zeroSumByTeam: Map[UUID, BigDecimal] =
-        preview.teams.map(t =>
-          t.teamId ->
-            (t.topTenEarnings * numTeams - totalPot)
-        ).toMap
-
-      val golferPayouts
-        : Map[(UUID, UUID), (BigDecimal, Int)] =
-        preview.teams.flatMap { t =>
-          t.golferScores.map(gs =>
-            (t.teamId, gs.golferId) ->
-              (gs.payout, gs.position)
-          )
-        }.toMap
-
-      val updatedTeams = report.teams.map { team =>
-        val priorWeekly = zeroSumByTeam
-          .getOrElse(team.teamId, BigDecimal(0))
-        val newPrevious = team.previous + priorWeekly
-        val newSubtotal = newPrevious + team.weeklyTotal
-
-        // Update golfer season stats via fold
-        val (updatedRows, addedTopTens, addedMoney) =
-          team.rows.foldLeft(
-            (List.empty[ReportRow], 0, BigDecimal(0))
-          ) { case ((acc, topTens, money), row) =>
-            row.golferId.flatMap(gid =>
-              golferPayouts.get((team.teamId, gid))
-            ) match
-              case Some((payout, _)) =>
-                val updated = row.copy(
-                  seasonEarnings =
-                    row.seasonEarnings + payout,
-                  seasonTopTens = row.seasonTopTens + 1
-                )
-                (acc :+ updated,
-                  topTens + 1,
-                  money + payout)
-              case None =>
-                (acc :+ row, topTens, money)
-          }
-
-        team.copy(
-          previous = newPrevious,
-          subtotal = newSubtotal,
-          totalCash = newSubtotal + team.sideBets,
-          rows = updatedRows,
-          topTenCount = team.topTenCount + addedTopTens,
-          topTenMoney = team.topTenMoney + addedMoney
-        )
-      }
-
-      // Update side bet detail with prior tournament data
-      val sideBetPerTeam = rules.sideBetAmount
-      val updatedSideBetDetail =
-        report.sideBetDetail.map { rd =>
-          val updatedEntries = rd.teams.map { entry =>
-            val gidOpt = updatedTeams
-              .find(_.teamId == entry.teamId)
-              .flatMap(_.rows
-                .find(_.round == rd.round)
-                .flatMap(_.golferId))
-            val liveEarnings = gidOpt.flatMap { gid =>
-              golferPayouts
-                .get((entry.teamId, gid))
-            }.map(_._1).getOrElse(BigDecimal(0))
-            val ownershipPct = updatedTeams
-              .find(_.teamId == entry.teamId)
-              .flatMap(_.rows
-                .find(_.round == rd.round)
-                .map(_.ownershipPct))
-              .getOrElse(BigDecimal(100))
-            val adjusted =
-              liveEarnings * ownershipPct / 100
-            entry.copy(
-              cumulativeEarnings =
-                entry.cumulativeEarnings + adjusted
-            )
-          }
-          val finalEntries = recomputeSideBetPayouts(
-            updatedEntries, numTeams, sideBetPerTeam
-          )
-          rd.copy(teams = finalEntries)
-        }
-
-      // Recompute side bet totals per team
-      val sideBetTotals: Map[UUID, BigDecimal] =
-        updatedSideBetDetail.flatMap(_.teams.map(e =>
-          e.teamId -> e.payout
-        )).groupBy(_._1).view
-          .mapValues(_.map(_._2).sum).toMap
-
-      // Apply updated side bets and recompute totalCash
-      val finalTeams = updatedTeams.map { t =>
-        val newSideBets = sideBetTotals
-          .getOrElse(t.teamId, BigDecimal(0))
-        t.copy(
-          sideBets = newSideBets,
-          totalCash = t.subtotal + newSideBets
-        )
-      }
-
-      report.copy(
-        teams = finalTeams,
-        sideBetDetail = updatedSideBetDetail,
-        standingsOrder = buildStandingsOrder(finalTeams),
-        live = Some(true)
-      )
-
-  // --------------------------------------------------
-  // Live overlay: merge live data onto report
-  // --------------------------------------------------
-
-  /** Overlay ESPN live preview data onto the base report.
-    * Replaces per-golfer earnings with live projected
-    * payouts and recomputes weekly totals, subtotals, and
-    * total cash.
-    */
-  private[service] def mergeLiveData(
-    report: WeeklyReport,
-    previews: List[EspnLivePreview],
-    rules: SeasonRules,
-    additive: Boolean = false
-  ): WeeklyReport =
-    previews.headOption match
-      case None => report
-      case Some(liveData) =>
-        val livePayout
-          : Map[(UUID, UUID), (BigDecimal, Int, Option[Int])] =
-          liveData.teams.flatMap { team =>
-            team.golferScores.map { gs =>
-              (team.teamId, gs.golferId) ->
-                (gs.payout, gs.position, gs.scoreToPar)
-            }
-          }.toMap
-
-        val numTeams = report.teams.size
-
-        // Phase 1: update rows and collect weekly earnings
-        val phase1Teams = report.teams.map { team =>
-          val updatedRows = team.rows.map { row =>
-            row.golferId.flatMap(gid =>
-              livePayout.get((team.teamId, gid))
-            ) match
-              case Some((payout, pos, stp)) =>
-                val numTied = livePayout.values
-                  .count(_._2 == pos)
-                val posStr =
-                  if numTied > 1 then s"T$pos"
-                  else s"$pos"
-                val stpStr = stp.map(formatStp)
-                val newEarnings =
-                  if additive then row.earnings + payout
-                  else payout
-                val newTopTens =
-                  if additive then row.topTens + 1 else 1
-                row.copy(
-                  earnings = newEarnings,
-                  positionStr = Some(posStr),
-                  scoreToPar = stpStr,
-                  topTens = newTopTens,
-                  seasonEarnings =
-                    row.seasonEarnings + payout,
-                  seasonTopTens = row.seasonTopTens + 1
-                )
-              case None =>
-                if additive then row
-                else row.copy(
-                  earnings = BigDecimal(0),
-                  topTens = 0
-                )
-          }
-
-          val weeklyTopTens =
-            updatedRows.map(_.earnings).sum
-          val liveTopTenCount =
-            if additive then
-              updatedRows.map(_.topTens).sum
-            else
-              team.topTenCount + updatedRows
-                .count(_.topTens > 0)
-
-          // Carry forward for phase 2
-          (team.copy(rows = updatedRows,
-            topTens = weeklyTopTens,
-            topTenCount = liveTopTenCount),
-            weeklyTopTens, team.previous, team.sideBets)
-        }
-
-        // Recompute zero-sum weekly totals
-        val totalPot = phase1Teams.map(_._2).sum
-
-        // Recompute side bets with live data
-        val sideBetPerTeam = rules.sideBetAmount
-        val liveSideBetDetail =
-          report.sideBetDetail.map { rd =>
-            val updatedEntries = rd.teams.map { entry =>
-              val gidOpt = phase1Teams
-                .map(_._1)
-                .find(_.teamId == entry.teamId)
-                .flatMap(_.rows
-                  .find(_.round == rd.round)
-                  .flatMap(_.golferId))
-              val liveEarnings = gidOpt.flatMap { gid =>
-                livePayout.get((entry.teamId, gid))
-              }.map(_._1).getOrElse(BigDecimal(0))
-              val ownershipPct = phase1Teams
-                .map(_._1)
-                .find(_.teamId == entry.teamId)
-                .flatMap(_.rows
-                  .find(_.round == rd.round)
-                  .map(_.ownershipPct))
-                .getOrElse(BigDecimal(100))
-              val adjusted =
-                liveEarnings * ownershipPct / 100
-              entry.copy(
-                cumulativeEarnings =
-                  entry.cumulativeEarnings + adjusted
-              )
-            }
-            val finalEntries = recomputeSideBetPayouts(
-              updatedEntries, numTeams, sideBetPerTeam
-            )
-            rd.copy(teams = finalEntries)
-          }
-
-        // Aggregate live side bet totals per team
-        val liveSideBetTotals: Map[UUID, BigDecimal] =
-          liveSideBetDetail.flatMap(_.teams.map(e =>
-            e.teamId -> e.payout
-          )).groupBy(_._1).view
-            .mapValues(_.map(_._2).sum).toMap
-
-        val finalTeams = phase1Teams.map {
-          (team, weeklyTopTens, previous, origSideBets) =>
-            val sideBets =
-              if liveSideBetTotals.nonEmpty then
-                liveSideBetTotals.getOrElse(
-                  team.teamId, BigDecimal(0)
-                )
-              else origSideBets
-            val weeklyTotal =
-              weeklyTopTens * numTeams - totalPot
-            val subtotal = previous + weeklyTotal
-            val totalCash = subtotal + sideBets
-            team.copy(
-              weeklyTotal = weeklyTotal,
-              subtotal = subtotal,
-              sideBets = sideBets,
-              totalCash = totalCash
-            )
-        }
-
-        report.copy(
-          teams = finalTeams,
-          sideBetDetail = liveSideBetDetail,
-          standingsOrder =
-            buildStandingsOrder(finalTeams),
-          live = Some(true)
-        )

@@ -41,7 +41,8 @@ object Main extends IOApp:
           val scoringService = ScoringService(xa)
           val espnImportService = EspnImportService(espnClient, xa)
           val tournamentService = TournamentService(espnImportService, scoringService, xa)
-          val weeklyReportService = WeeklyReportService(espnImportService, xa)
+          val liveOverlay = LiveOverlayService(espnImportService)
+          val weeklyReportService = WeeklyReportService(liveOverlay, xa)
           val adminService = AdminService(espnClient, xa)
           val authService = AuthService(xa, sessions)
 
