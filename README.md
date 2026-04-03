@@ -2,6 +2,8 @@
 
 A fantasy PGA Tour league tracker for the Castlewood group. 13 teams draft real PGA players and compete for weekly payouts based on tournament results.
 
+> **[Full API Specification](docs/API_SPEC.md)** — complete backend spec including database schema, all 59 endpoints, scoring logic, ESPN integration, and report assembly.
+
 ## League Rules
 
 ### The Draft
