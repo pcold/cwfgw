@@ -162,7 +162,7 @@ class WeeklyReportService(
   /** Build prior weekly zero-sum totals for tournaments
     * before the selected one.
     */
-  private def buildPriorWeekly(
+  private[service] def buildPriorWeekly(
     throughTournaments: List[Tournament],
     throughScores: List[FantasyScore],
     tournament: Option[Tournament],
@@ -188,7 +188,7 @@ class WeeklyReportService(
     }.groupBy(_._1).view.mapValues(_.map(_._2).sum).toMap
 
   /** Build tournament info from an optional Tournament. */
-  private def buildTournamentInfo(
+  private[service] def buildTournamentInfo(
     tournament: Option[Tournament]
   ): ReportTournamentInfo =
     ReportTournamentInfo(
@@ -204,7 +204,7 @@ class WeeklyReportService(
     )
 
   /** Build a single team's report column for getReport. */
-  private def buildReportTeamColumn(
+  private[service] def buildReportTeamColumn(
     team: Team,
     allRosters: List[RosterEntry],
     golferMap: Map[UUID, Golfer],
@@ -259,7 +259,7 @@ class WeeklyReportService(
     )
 
   /** Build rows 1-8 for a single team in a weekly report. */
-  private def buildWeeklyRows(
+  private[service] def buildWeeklyRows(
     roster: List[RosterEntry],
     golferMap: Map[UUID, Golfer],
     resultsByGolfer: Map[UUID, TournamentResult],
@@ -308,7 +308,7 @@ class WeeklyReportService(
         )
   }
 
-  private def emptyRow(round: Int): ReportRow =
+  private[service] def emptyRow(round: Int): ReportRow =
     ReportRow(
       round = round,
       golferName = None,
@@ -323,7 +323,7 @@ class WeeklyReportService(
     )
 
   /** Build undrafted top-10 list for a single tournament. */
-  private def buildUndraftedForTournament(
+  private[service] def buildUndraftedForTournament(
     results: List[TournamentResult],
     rosteredGolferIds: Set[UUID],
     golferMap: Map[UUID, Golfer],
@@ -490,7 +490,7 @@ class WeeklyReportService(
   // Season row / undrafted helpers
   // --------------------------------------------------
 
-  private def buildSeasonRows(
+  private[service] def buildSeasonRows(
     roster: List[RosterEntry],
     golferMap: Map[UUID, Golfer],
     cumulative: Map[(UUID, UUID), (BigDecimal, Int)],
@@ -521,7 +521,7 @@ class WeeklyReportService(
         )
   }
 
-  private def buildSideBetPerRound(
+  private[service] def buildSideBetPerRound(
     rules: SeasonRules,
     allRosters: List[RosterEntry],
     allScores: List[FantasyScore],
@@ -557,7 +557,7 @@ class WeeklyReportService(
       (round, teamTotals, payouts)
   }
 
-  private def aggregateSideBets(
+  private[service] def aggregateSideBets(
     perRound: List[
       (Int, Map[UUID, BigDecimal], Map[UUID, BigDecimal])
     ]
@@ -574,7 +574,7 @@ class WeeklyReportService(
           }
       }
 
-  private def buildSideBetDetail(
+  private[service] def buildSideBetDetail(
     perRound: List[
       (Int, Map[UUID, BigDecimal], Map[UUID, BigDecimal])
     ],
@@ -606,7 +606,7 @@ class WeeklyReportService(
       ReportSideBetRound(round = round, teams = teamEntries)
     }
 
-  private def buildUndraftedAgg(
+  private[service] def buildUndraftedAgg(
     allResults: List[TournamentResult],
     completed: List[Tournament],
     rosteredGolferIds: Set[UUID],
@@ -831,7 +831,7 @@ class WeeklyReportService(
           seasonId, teamId, golferId, ids
         )
 
-  private def buildCumulativeHistory(
+  private[service] def buildCumulativeHistory(
     sortedTournaments: List[Tournament],
     allScores: List[FantasyScore],
     teams: List[Team],
