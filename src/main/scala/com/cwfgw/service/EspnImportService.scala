@@ -4,8 +4,6 @@ import cats.effect.IO
 import cats.implicits.*
 import doobie.*
 import doobie.implicits.*
-import doobie.postgres.implicits.*
-import doobie.postgres.circe.jsonb.implicits.*
 import io.circe.Json
 import io.circe.derivation.ConfiguredCodec
 import io.circe.syntax.*
@@ -87,11 +85,9 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
         allGolfers <- GolferRepository.findAll(activeOnly = false, search = None)
         teams <- TeamRepository.findBySeason(seasonId)
         rosters <- TeamRepository.getRosterBySeason(seasonId)
-        tournamentRecords <- tournaments.traverse { espn =>
-          sql"""SELECT id, payout_multiplier
-                FROM tournaments
-                WHERE pga_tournament_id = ${espn.espnId}""".query[(UUID, BigDecimal)].option
-        }
+        tournamentRecords <- tournaments.traverse(espn =>
+          TournamentRepository.findIdAndMultiplier(espn.espnId)
+        )
       yield (seasonOpt, allGolfers, teams, rosters, tournamentRecords)).transact(xa)
       (seasonOpt, allGolfers, teams, rosters, tournamentRecords) = dbState
       rules = seasonOpt.map(_.seasonRules).getOrElse(SeasonRules.default)
@@ -195,22 +191,20 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
     val action =
       for
         // Find our tournament by ESPN ID (stored in pga_tournament_id)
-        tournamentOpt <- sql"SELECT id FROM tournaments WHERE pga_tournament_id = ${espn.espnId}".query[UUID].option
+        tournamentOpt <- TournamentRepository.findIdByPgaId(espn.espnId)
         tournamentId <- tournamentOpt match
           case Some(id) => FC.pure(id)
           case None =>
             // Try to find by name similarity (fallback)
-            sql"SELECT id FROM tournaments WHERE pga_tournament_id IS NULL ORDER BY start_date ASC LIMIT 1".query[UUID]
-              .option.flatMap:
-                case Some(id) =>
-                  // Link this tournament to the ESPN event
-                  sql"UPDATE tournaments SET pga_tournament_id = ${espn.espnId} WHERE id = $id".update.run.as(id)
-                case None => FC.raiseError[UUID](new RuntimeException(s"No tournament found for ESPN event '${espn
-                      .name}' (${espn.espnId}). Create the tournament first."))
+            TournamentRepository.findFirstUnlinked.flatMap:
+              case Some(id) =>
+                TournamentRepository.linkPgaTournamentId(id, espn.espnId).as(id)
+              case None => FC.raiseError[UUID](new RuntimeException(s"No tournament found for ESPN event '${espn
+                    .name}' (${espn.espnId}). Create the tournament first."))
 
         // Update tournament status if completed
         _ <-
-          if espn.completed then sql"UPDATE tournaments SET status = 'completed' WHERE id = $tournamentId".update.run
+          if espn.completed then TournamentRepository.markCompleted(tournamentId)
           else FC.pure(0)
 
         // Load all golfers for name matching
@@ -271,13 +265,13 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
     */
   private def matchGolfer(competitor: EspnCompetitor, allGolfers: List[Golfer]): ConnectionIO[Option[(UUID, Boolean)]] =
     // 1. Check DB for existing ESPN ID mapping
-    sql"SELECT id FROM golfers WHERE pga_player_id = ${competitor.espnId}".query[UUID].option.flatMap:
+    GolferRepository.findIdByPgaPlayerId(competitor.espnId).flatMap:
       case Some(id) => FC.pure(Some((id, false)))
       case None => findGolferMatch(competitor.name, competitor.espnId, allGolfers) match
-          case GolferMatchResult.FullNameMatch(g) => sql"UPDATE golfers SET pga_player_id = ${competitor
-                .espnId} WHERE id = ${g.id} AND pga_player_id IS NULL".update.run.as(Some((g.id, false)))
-          case GolferMatchResult.LastNameMatch(g) => sql"UPDATE golfers SET pga_player_id = ${competitor
-                .espnId} WHERE id = ${g.id} AND pga_player_id IS NULL".update.run.as(Some((g.id, false)))
+          case GolferMatchResult.FullNameMatch(g) =>
+            GolferRepository.linkPgaPlayerId(g.id, competitor.espnId).as(Some((g.id, false)))
+          case GolferMatchResult.LastNameMatch(g) =>
+            GolferRepository.linkPgaPlayerId(g.id, competitor.espnId).as(Some((g.id, false)))
           case GolferMatchResult.NoMatch(first, last) => GolferRepository.create(CreateGolfer(
               pgaPlayerId = Some(competitor.espnId),
               firstName = first,

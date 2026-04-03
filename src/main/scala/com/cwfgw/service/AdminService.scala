@@ -4,8 +4,6 @@ import cats.effect.IO
 import cats.implicits.*
 import doobie.*
 import doobie.implicits.*
-import doobie.postgres.implicits.*
-import doobie.postgres.circe.jsonb.implicits.*
 import io.circe.Json
 import io.circe.derivation.ConfiguredCodec
 import io.circe.syntax.*
@@ -295,8 +293,7 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
   ): ConnectionIO[Golfer] = espnId match
     case Some(eid) =>
       // Check if golfer with this ESPN ID already exists
-      sql"SELECT id, pga_player_id, first_name, last_name, country, world_ranking, active, metadata, updated_at FROM golfers WHERE pga_player_id = $eid"
-        .query[Golfer].option.flatMap:
+      GolferRepository.findByPgaPlayerId(eid).flatMap:
           case Some(g) => g.pure[ConnectionIO]
           case None =>
             val fullName = espnName.getOrElse(rosterName)

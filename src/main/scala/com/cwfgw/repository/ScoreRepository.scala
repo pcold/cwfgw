@@ -1,5 +1,6 @@
 package com.cwfgw.repository
 
+import cats.data.NonEmptyList
 import doobie.*
 import doobie.implicits.*
 import doobie.postgres.implicits.*
@@ -46,6 +47,60 @@ object ScoreRepository:
   def getStandings(seasonId: UUID): ConnectionIO[List[SeasonStanding]] =
     sql"""SELECT id, season_id, team_id, total_points, tournaments_played, last_updated
           FROM season_standings WHERE season_id = $seasonId ORDER BY total_points DESC""".query[SeasonStanding].to[List]
+
+  /** Total points for a golfer on a team across all
+    * tournaments in a season. */
+  def golferPointTotal(
+      seasonId: UUID,
+      teamId: UUID,
+      golferId: UUID
+  ): ConnectionIO[BigDecimal] =
+    sql"""SELECT COALESCE(SUM(points), 0)
+          FROM fantasy_scores
+          WHERE season_id = $seasonId
+            AND team_id = $teamId
+            AND golfer_id = $golferId"""
+      .query[BigDecimal].unique
+
+  /** Total points and tournament count for a team
+    * across all tournaments in a season. */
+  def teamSeasonTotals(
+      seasonId: UUID,
+      teamId: UUID
+  ): ConnectionIO[(BigDecimal, Int)] =
+    sql"""SELECT COALESCE(SUM(points), 0),
+                 COUNT(DISTINCT tournament_id)
+          FROM fantasy_scores
+          WHERE season_id = $seasonId
+            AND team_id = $teamId"""
+      .query[(BigDecimal, Int)].unique
+
+  /** Total points for a golfer on a team, scoped to
+    * a specific set of tournaments. */
+  def golferPointTotalScoped(
+      seasonId: UUID,
+      teamId: UUID,
+      golferId: UUID,
+      tournamentIds: NonEmptyList[UUID]
+  ): ConnectionIO[BigDecimal] =
+    val inClause =
+      Fragments.in(fr"tournament_id", tournamentIds)
+    (fr"""SELECT COALESCE(SUM(points), 0)
+          FROM fantasy_scores
+          WHERE season_id = $seasonId
+            AND team_id = $teamId
+            AND golfer_id = $golferId
+            AND""" ++ inClause)
+      .query[BigDecimal].unique
+
+  def deleteByTournament(tournamentId: UUID): ConnectionIO[Int] =
+    sql"DELETE FROM fantasy_scores WHERE tournament_id = $tournamentId".update.run
+
+  def deleteBySeason(seasonId: UUID): ConnectionIO[Int] =
+    sql"DELETE FROM fantasy_scores WHERE season_id = $seasonId".update.run
+
+  def deleteStandingsBySeason(seasonId: UUID): ConnectionIO[Int] =
+    sql"DELETE FROM season_standings WHERE season_id = $seasonId".update.run
 
   def upsertStanding(
     seasonId: UUID,

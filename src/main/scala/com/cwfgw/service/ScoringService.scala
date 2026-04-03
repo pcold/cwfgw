@@ -6,7 +6,6 @@ import com.cwfgw.domain.{*, given}
 import com.cwfgw.repository.{ScoreRepository, SeasonRepository, TeamRepository, TournamentRepository}
 import doobie.*
 import doobie.implicits.*
-import doobie.postgres.implicits.*
 import io.circe.syntax.*
 
 import java.util.UUID
@@ -100,11 +99,7 @@ class ScoringService(xa: Transactor[IO]):
                 rules.sideBetRounds.traverse { round =>
                   val roundPicks = allRosters.filter(_.draftRound.contains(round))
                   roundPicks.traverse { entry =>
-                    sql"""SELECT COALESCE(SUM(points), 0)
-                      FROM fantasy_scores
-                      WHERE season_id = $seasonId
-                        AND team_id = ${entry.teamId}
-                        AND golfer_id = ${entry.golferId}""".query[BigDecimal].unique
+                    ScoreRepository.golferPointTotal(seasonId, entry.teamId, entry.golferId)
                       .map(total => (entry.teamId, entry.golferId, total))
                   }.map { entries =>
                     val sorted = entries.sortBy(-_._3)
@@ -191,11 +186,7 @@ class ScoringService(xa: Transactor[IO]):
         teams <- TeamRepository.findBySeason(seasonId)
         standings <- teams.traverse { team =>
           for
-            scores <- sql"""SELECT COALESCE(SUM(points), 0),
-                    COUNT(DISTINCT tournament_id)
-                    FROM fantasy_scores
-                    WHERE season_id = $seasonId
-                      AND team_id = ${team.id}""".query[(BigDecimal, Int)].unique
+            scores <- ScoreRepository.teamSeasonTotals(seasonId, team.id)
             standing <- ScoreRepository.upsertStanding(seasonId, team.id, scores._1, scores._2)
           yield standing
         }

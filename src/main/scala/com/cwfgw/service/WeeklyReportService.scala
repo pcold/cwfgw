@@ -3,24 +3,14 @@ package com.cwfgw.service
 import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.implicits.*
+import com.cwfgw.domain.*
+import com.cwfgw.repository.*
 import doobie.*
 import doobie.implicits.*
-import doobie.postgres.implicits.*
-import doobie.postgres.circe.jsonb.implicits.*
-
-import java.util.UUID
-import java.time.LocalDate
-
 import org.typelevel.log4cats.LoggerFactory
 
-import com.cwfgw.domain.*
-import com.cwfgw.repository.{
-  GolferRepository,
-  ScoreRepository,
-  SeasonRepository,
-  TeamRepository,
-  TournamentRepository
-}
+import java.time.LocalDate
+import java.util.UUID
 
 /** Assembles the full weekly report data matching the
   * PDF layout. Returns a grid: 13 team columns x 8 draft
@@ -1015,21 +1005,12 @@ class WeeklyReportService(
     golferId: UUID,
     tournamentIds: Set[UUID]
   ): ConnectionIO[BigDecimal] =
-    if tournamentIds.isEmpty then
-      BigDecimal(0).pure[ConnectionIO]
-    else
-      val inClause = Fragments.in(
-        fr"fs.tournament_id",
-        cats.data.NonEmptyList
-          .fromListUnsafe(tournamentIds.toList)
-      )
-      (fr"""SELECT COALESCE(SUM(fs.points), 0)
-            FROM fantasy_scores fs
-            WHERE fs.season_id = $seasonId
-              AND fs.team_id = $teamId
-              AND fs.golfer_id = $golferId
-              AND""" ++ inClause)
-        .query[BigDecimal].unique
+    NonEmptyList.fromList(tournamentIds.toList) match
+      case None => BigDecimal(0).pure[ConnectionIO]
+      case Some(ids) =>
+        ScoreRepository.golferPointTotalScoped(
+          seasonId, teamId, golferId, ids
+        )
 
   private def computeSideBets(
     sideBetCumulative: List[(Int, Map[UUID, BigDecimal])],

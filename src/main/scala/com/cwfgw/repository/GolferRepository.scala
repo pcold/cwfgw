@@ -26,6 +26,18 @@ object GolferRepository:
   def findById(id: UUID): ConnectionIO[Option[Golfer]] = (fr"SELECT" ++ selectCols ++ fr"FROM golfers WHERE id = $id")
     .query[Golfer].option
 
+  /** Find a golfer by their ESPN/PGA athlete ID. */
+  def findIdByPgaPlayerId(pgaPlayerId: String): ConnectionIO[Option[UUID]] =
+    sql"SELECT id FROM golfers WHERE pga_player_id = $pgaPlayerId".query[UUID].option
+
+  /** Find a full golfer record by their ESPN/PGA athlete ID. */
+  def findByPgaPlayerId(pgaPlayerId: String): ConnectionIO[Option[Golfer]] =
+    (fr"SELECT" ++ selectCols ++ fr"FROM golfers WHERE pga_player_id = $pgaPlayerId").query[Golfer].option
+
+  /** Link an ESPN/PGA athlete ID to a golfer (only if not already linked). */
+  def linkPgaPlayerId(id: UUID, pgaPlayerId: String): ConnectionIO[Int] =
+    sql"UPDATE golfers SET pga_player_id = $pgaPlayerId WHERE id = $id AND pga_player_id IS NULL".update.run
+
   def create(req: CreateGolfer): ConnectionIO[Golfer] =
     sql"""INSERT INTO golfers (pga_player_id, first_name, last_name, country, world_ranking)
           VALUES (${req.pgaPlayerId}, ${req.firstName}, ${req.lastName}, ${req.country}, ${req.worldRanking})

@@ -4,11 +4,10 @@ import cats.effect.IO
 import cats.implicits.*
 import doobie.*
 import doobie.implicits.*
-import doobie.postgres.implicits.*
 import org.typelevel.log4cats.LoggerFactory
 import java.util.UUID
 import com.cwfgw.domain.*
-import com.cwfgw.repository.{TournamentRepository, SeasonRepository}
+import com.cwfgw.repository.{ScoreRepository, SeasonRepository, TournamentRepository}
 
 class TournamentService(espnImportService: EspnImportService, scoringService: ScoringService, xa: Transactor[IO])(using
   LoggerFactory[IO]
@@ -81,10 +80,8 @@ class TournamentService(espnImportService: EspnImportService, scoringService: Sc
             val deleteAndReset =
               for
                 _ <- logger.info(s"Resetting '${tournament.name}'...")
-                scoresDeleted <- sql"DELETE FROM fantasy_scores WHERE tournament_id = $tournamentId".update.run
-                  .transact(xa)
-                resultsDeleted <- sql"DELETE FROM tournament_results WHERE tournament_id = $tournamentId".update.run
-                  .transact(xa)
+                scoresDeleted <- ScoreRepository.deleteByTournament(tournamentId).transact(xa)
+                resultsDeleted <- TournamentRepository.deleteResultsByTournament(tournamentId).transact(xa)
                 _ <- TournamentRepository.update(
                   tournamentId,
                   UpdateTournament(
@@ -114,19 +111,10 @@ class TournamentService(espnImportService: EspnImportService, scoringService: Sc
         val clean =
           for
             _ <- logger.info(s"Cleaning all results for season '${season.name}'...")
-            scores <- sql"""DELETE FROM fantasy_scores
-                          WHERE season_id = $seasonId""".update.run.transact(xa)
-            results <- sql"""DELETE FROM tournament_results
-                           WHERE tournament_id IN (
-                             SELECT id FROM tournaments
-                             WHERE season_id = $seasonId
-                           )""".update.run.transact(xa)
-            standings <- sql"""DELETE FROM season_standings
-                             WHERE season_id = $seasonId""".update.run.transact(xa)
-            tournaments <- sql"""UPDATE tournaments
-                               SET status = 'upcoming'
-                               WHERE season_id = $seasonId
-                                 AND status != 'upcoming'""".update.run.transact(xa)
+            scores <- ScoreRepository.deleteBySeason(seasonId).transact(xa)
+            results <- TournamentRepository.deleteResultsBySeason(seasonId).transact(xa)
+            standings <- ScoreRepository.deleteStandingsBySeason(seasonId).transact(xa)
+            tournaments <- TournamentRepository.resetSeasonTournaments(seasonId).transact(xa)
             _ <- logger.info(
               s"Cleaned season '${season.name}': " + s"$scores scores, $results results, " +
                 s"$standings standings, $tournaments tournaments reset"

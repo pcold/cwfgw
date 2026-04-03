@@ -59,6 +59,37 @@ object TournamentRepository:
           WHERE tournament_id = $tournamentId
           ORDER BY position ASC NULLS LAST""".query[TournamentResult].to[List]
 
+  /** Look up a tournament's internal id and payout multiplier by its ESPN/PGA id. */
+  def findIdAndMultiplier(pgaTournamentId: String): ConnectionIO[Option[(UUID, BigDecimal)]] =
+    sql"""SELECT id, payout_multiplier FROM tournaments
+          WHERE pga_tournament_id = $pgaTournamentId""".query[(UUID, BigDecimal)].option
+
+  /** Find a tournament id by its ESPN/PGA tournament id. */
+  def findIdByPgaId(pgaTournamentId: String): ConnectionIO[Option[UUID]] =
+    sql"SELECT id FROM tournaments WHERE pga_tournament_id = $pgaTournamentId".query[UUID].option
+
+  /** Find the earliest tournament with no linked ESPN id. */
+  def findFirstUnlinked: ConnectionIO[Option[UUID]] =
+    sql"SELECT id FROM tournaments WHERE pga_tournament_id IS NULL ORDER BY start_date ASC LIMIT 1".query[UUID].option
+
+  /** Link an ESPN/PGA tournament id to a tournament record. */
+  def linkPgaTournamentId(id: UUID, pgaTournamentId: String): ConnectionIO[Int] =
+    sql"UPDATE tournaments SET pga_tournament_id = $pgaTournamentId WHERE id = $id".update.run
+
+  /** Mark a tournament as completed. */
+  def markCompleted(id: UUID): ConnectionIO[Int] =
+    sql"UPDATE tournaments SET status = 'completed' WHERE id = $id".update.run
+
+  def deleteResultsByTournament(tournamentId: UUID): ConnectionIO[Int] =
+    sql"DELETE FROM tournament_results WHERE tournament_id = $tournamentId".update.run
+
+  def deleteResultsBySeason(seasonId: UUID): ConnectionIO[Int] =
+    sql"""DELETE FROM tournament_results
+          WHERE tournament_id IN (SELECT id FROM tournaments WHERE season_id = $seasonId)""".update.run
+
+  def resetSeasonTournaments(seasonId: UUID): ConnectionIO[Int] =
+    sql"UPDATE tournaments SET status = 'upcoming' WHERE season_id = $seasonId AND status != 'upcoming'".update.run
+
   def upsertResult(tournamentId: UUID, req: CreateTournamentResult): ConnectionIO[TournamentResult] =
     sql"""INSERT INTO tournament_results (
             tournament_id, golfer_id, position, score_to_par,
