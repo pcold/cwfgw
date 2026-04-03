@@ -46,9 +46,8 @@ class TournamentService(espnImportService: EspnImportService, scoringService: Sc
             .sortBy(_.startDate)
 
         checkOrder.flatMap: unfinalized =>
-          if unfinalized.nonEmpty then
-            val names = unfinalized.map(t => s"'${t.name}' (${t.startDate})").mkString(", ")
-            IO.pure(Left(s"Cannot finalize out of order. Finalize these first: $names"))
+          val blockMsg = checkBlockingTournaments(unfinalized, "finalize")
+          if blockMsg.isDefined then IO.pure(Left(blockMsg.get))
           else
             val pipeline =
               for
@@ -73,9 +72,8 @@ class TournamentService(espnImportService: EspnImportService, scoringService: Sc
         val seasonId = tournament.seasonId
         TournamentRepository.findAll(Some(seasonId), Some("completed")).transact(xa).flatMap: completed =>
           val later = completed.filter(t => t.id != tournamentId && t.startDate.isAfter(tournament.startDate))
-          if later.nonEmpty then
-            val names = later.sortBy(_.startDate).map(t => s"'${t.name}' (${t.startDate})").mkString(", ")
-            IO.pure(Left(s"Cannot reset out of order. Reset these first: $names"))
+          val blockMsg = checkBlockingTournaments(later, "reset")
+          if blockMsg.isDefined then IO.pure(Left(blockMsg.get))
           else
             val deleteAndReset =
               for
@@ -134,11 +132,8 @@ class TournamentService(espnImportService: EspnImportService, scoringService: Sc
       result <- seasonOpt match
         case None => IO.pure(Left("Season not found"))
         case Some(season) => TournamentRepository.findAll(Some(seasonId), None).transact(xa).flatMap: tournaments =>
-            val incomplete = tournaments.filter(_.status != "completed")
-            if tournaments.isEmpty then IO.pure(Left("No tournaments in this season"))
-            else if incomplete.nonEmpty then
-              val names = incomplete.sortBy(_.startDate).map(t => s"'${t.name}' (${t.status})").mkString(", ")
-              IO.pure(Left(s"Cannot finalize — incomplete tournaments: $names"))
+            val seasonCheck = checkSeasonComplete(tournaments)
+            if seasonCheck.isDefined then IO.pure(Left(seasonCheck.get))
             else
               SeasonRepository
                 .update(seasonId, UpdateSeason(
@@ -147,3 +142,21 @@ class TournamentService(espnImportService: EspnImportService, scoringService: Sc
                 ))
                 .transact(xa).map(_ => Right(s"Season '${season.name}' finalized (${tournaments.size} tournaments)"))
     yield result
+
+  /** Pure: check if any tournaments block an operation (finalize or reset). Returns an error message if blocked. */
+  private[service] def checkBlockingTournaments(blocking: List[Tournament], action: String): Option[String] =
+    if blocking.isEmpty then None
+    else
+      val names = blocking.sortBy(_.startDate).map(t => s"'${t.name}' (${t.startDate})").mkString(", ")
+      val verb = if action == "finalize" then "Finalize" else "Reset"
+      Some(s"Cannot $action out of order. $verb these first: $names")
+
+  /** Pure: check if all tournaments in a season are completed. Returns an error message if not ready. */
+  private[service] def checkSeasonComplete(tournaments: List[Tournament]): Option[String] =
+    if tournaments.isEmpty then Some("No tournaments in this season")
+    else
+      val incomplete = tournaments.filter(_.status != "completed")
+      if incomplete.isEmpty then None
+      else
+        val names = incomplete.sortBy(_.startDate).map(t => s"'${t.name}' (${t.status})").mkString(", ")
+        Some(s"Cannot finalize — incomplete tournaments: $names")

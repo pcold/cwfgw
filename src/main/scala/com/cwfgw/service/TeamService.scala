@@ -27,20 +27,24 @@ class TeamService(xa: Transactor[IO]):
 
   /** Full roster view for a season. */
   def getRosterView(seasonId: UUID): IO[List[RosterViewTeam]] = TeamRepository.getRosterViewBySeason(seasonId)
-    .transact(xa).map: rows =>
-      val teamOrder = rows.map(r => r._1).distinct
-      rows.groupBy(r => (r._1, r._2)).toList.sortBy((key, _) => teamOrder.indexOf(key._1)).map: (key, picks) =>
-        RosterViewTeam(
-          teamId = key._1,
-          teamName = key._2,
-          picks = picks.map: r =>
-            RosterViewPick(
-              round = r._3,
-              golferName = if r._4.nonEmpty then s"${r._4} ${r._5}" else r._5,
-              ownershipPct = r._6,
-              golferId = r._7
-            )
-        )
+    .transact(xa).map(buildRosterView)
+
+  private[service] def buildRosterView(
+    rows: List[(UUID, String, Int, String, String, BigDecimal, UUID)]
+  ): List[RosterViewTeam] =
+    val teamOrder = rows.map(r => r._1).distinct
+    rows.groupBy(r => (r._1, r._2)).toList.sortBy((key, _) => teamOrder.indexOf(key._1)).map: (key, picks) =>
+      RosterViewTeam(
+        teamId = key._1,
+        teamName = key._2,
+        picks = picks.map: r =>
+          RosterViewPick(
+            round = r._3,
+            golferName = if r._4.nonEmpty then s"${r._4} ${r._5}" else r._5,
+            ownershipPct = r._6,
+            golferId = r._7
+          )
+      )
 
 case class RosterViewTeam(teamId: UUID, teamName: String, picks: List[RosterViewPick]) derives ConfiguredCodec
 
