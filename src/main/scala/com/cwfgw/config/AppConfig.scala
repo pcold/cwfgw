@@ -1,10 +1,10 @@
 package com.cwfgw.config
 
-import com.comcast.ip4s.{Host, Port}
+import com.comcast.ip4s.*
 
 case class ServerConfig(host: String, port: Int):
-  def http4sHost: Host = Host.fromString(host).getOrElse(Host.fromString("0.0.0.0").get)
-  def http4sPort: Port = Port.fromInt(port).getOrElse(Port.fromInt(8080).get)
+  def http4sHost: Host = Host.fromString(host).getOrElse(ipv4"0.0.0.0")
+  def http4sPort: Port = Port.fromInt(port).getOrElse(port"8080")
 
 case class DatabaseConfig(driver: String, url: String, user: String, password: String, poolSize: Int)
 

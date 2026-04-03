@@ -5,7 +5,7 @@ import org.http4s.*
 import org.http4s.dsl.io.*
 import org.http4s.circe.*
 import org.http4s.circe.CirceEntityCodec.*
-import io.circe.{Json, Decoder}
+import io.circe.Decoder
 import io.circe.syntax.*
 import org.typelevel.log4cats.LoggerFactory
 import java.util.UUID
@@ -17,7 +17,7 @@ object AdminRoutes:
   private def errorResponse(e: Throwable)(using LoggerFactory[IO]): IO[Response[IO]] =
     val logger = LoggerFactory[IO].getLogger
     val msg = Option(e.getMessage).getOrElse(e.getClass.getSimpleName)
-    logger.error(e)(s"Admin route error: $msg") >> BadRequest(Json.obj("error" -> msg.asJson))
+    logger.error(e)(s"Admin route error: $msg") >> RouteHelpers.badRequest(msg)
 
   private case class SeasonUploadRequest(seasonId: UUID, seasonYear: Int, schedule: String)
   private given Decoder[SeasonUploadRequest] = Decoder

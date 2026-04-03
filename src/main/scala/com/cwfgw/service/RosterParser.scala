@@ -34,17 +34,14 @@ object RosterParser:
     if errors.nonEmpty then Left(errors.mkString("\n")) else Right(results.collect { case Right(t) => t })
 
   private def splitIntoTeamBlocks(lines: List[String]): List[List[String]] =
-    val blocks = scala.collection.mutable.ListBuffer[List[String]]()
-    val current = scala.collection.mutable.ListBuffer[String]()
-    for line <- lines do
-      val trimmed = line.trim
-      if trimmed.isEmpty then
-        if current.nonEmpty then
-          blocks += current.toList
-          current.clear()
-      else current += trimmed
-    if current.nonEmpty then blocks += current.toList
-    blocks.toList
+    val (blocks, current) = lines.foldLeft((List.empty[List[String]], List.empty[String])) {
+      case ((blocks, current), line) =>
+        val trimmed = line.trim
+        if trimmed.isEmpty then
+          if current.nonEmpty then (blocks :+ current.reverse, Nil) else (blocks, Nil)
+        else (blocks, trimmed :: current)
+    }
+    if current.nonEmpty then blocks :+ current.reverse else blocks
 
   private def parseTeamBlock(lines: List[String]): Either[String, ParsedTeam] = lines match
     case Nil => Left("Empty team block")

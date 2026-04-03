@@ -169,14 +169,12 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
     val normalized = stripDiacritics(name.trim.toUpperCase)
 
     // 0. Check hard-coded aliases first
-    playerAliases.get(normalized).orElse(playerAliases.get(normalized.split("[\\s,.]+").last)) match
-      case Some(aliasName) => athletes.find(a => stripDiacritics(a.name).equalsIgnoreCase(aliasName)) match
-          case Some(athlete) => return MatchResult.Exact(athlete)
-          case None =>
-            // Player not in ESPN pool — return exact with a synthetic athlete so we don't fuzzy-match garbage
-            val parts = aliasName.split("\\s+", 2)
-            return MatchResult.Exact(EspnAthlete("alias-" + normalized.toLowerCase, aliasName))
-      case None => // no alias, fall through
+    val aliasMatch = playerAliases.get(normalized).orElse(playerAliases.get(normalized.split("[\\s,.]+").last))
+    aliasMatch match
+      case Some(aliasName) =>
+        val found = athletes.find(a => stripDiacritics(a.name).equalsIgnoreCase(aliasName))
+        MatchResult.Exact(found.getOrElse(EspnAthlete("alias-" + normalized.toLowerCase, aliasName)))
+      case None =>
     // Parse name into (lastName, optionalFirstHint)
     // Formats: "SCHEFFLER", "YOUNG, C.", "M.W. LEE", "CAM. YOUNG", "CAM YOUNG"
     val (lastName, firstHint) =

@@ -4,19 +4,7 @@ import io.circe.derivation.ConfiguredCodec
 import java.util.UUID
 import com.cwfgw.domain.{*, given}
 
-/** Breakdown of how a golfer's payout was calculated. Stored as JSONB in fantasy_scores.breakdown.
-  */
-case class ScoreBreakdown(
-  position: Int,
-  numTied: Int,
-  basePayout: BigDecimal,
-  ownershipPct: BigDecimal,
-  payout: BigDecimal,
-  multiplier: BigDecimal
-) derives ConfiguredCodec
-
-/** A single golfer's score entry within a team's weekly result.
-  */
+/** A single golfer's score entry within a team's weekly result. */
 case class GolferScoreEntry(golferId: UUID, payout: BigDecimal, breakdown: ScoreBreakdown) derives ConfiguredCodec
 
 /** One team's weekly scoring result. */

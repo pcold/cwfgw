@@ -5,8 +5,6 @@ import org.http4s.*
 import org.http4s.dsl.io.*
 import org.http4s.circe.*
 import org.http4s.circe.CirceEntityCodec.*
-import io.circe.syntax.*
-import io.circe.Json
 import java.util.UUID
 import com.cwfgw.domain.*
 import com.cwfgw.service.TournamentService
@@ -44,19 +42,19 @@ object TournamentRoutes:
   def adminRoutes(service: TournamentService): HttpRoutes[IO] = HttpRoutes.of[IO]:
     case POST -> Root / "api" / "v1" / "tournaments" / UUIDVar(id) / "finalize" => service.finalizeTournament(id)
         .flatMap:
-          case Right(msg) => Ok(Json.obj("message" -> msg.asJson))
-          case Left(err) => BadRequest(Json.obj("error" -> err.asJson))
+          case Right(msg) => RouteHelpers.okMessage(msg)
+          case Left(err) => RouteHelpers.badRequest(err)
 
     case POST -> Root / "api" / "v1" / "tournaments" / UUIDVar(id) / "reset" => service.resetTournament(id).flatMap:
-        case Right(msg) => Ok(Json.obj("message" -> msg.asJson))
-        case Left(err) => BadRequest(Json.obj("error" -> err.asJson))
+        case Right(msg) => RouteHelpers.okMessage(msg)
+        case Left(err) => RouteHelpers.badRequest(err)
 
     case POST -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "finalize" => service.finalizeSeason(seasonId)
         .flatMap:
-          case Right(msg) => Ok(Json.obj("message" -> msg.asJson))
-          case Left(err) => BadRequest(Json.obj("error" -> err.asJson))
+          case Right(msg) => RouteHelpers.okMessage(msg)
+          case Left(err) => RouteHelpers.badRequest(err)
 
     case POST -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "clean-results" => service
         .cleanSeasonResults(seasonId).flatMap:
-          case Right(msg) => Ok(Json.obj("message" -> msg.asJson))
-          case Left(err) => BadRequest(Json.obj("error" -> err.asJson))
+          case Right(msg) => RouteHelpers.okMessage(msg)
+          case Left(err) => RouteHelpers.badRequest(err)

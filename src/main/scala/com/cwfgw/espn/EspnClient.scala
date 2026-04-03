@@ -112,20 +112,17 @@ class EspnClient(httpClient: JHttpClient)(using LoggerFactory[IO]):
     */
   private def assignPositions(competitors: List[EspnCompetitor]): List[EspnCompetitor] =
     val sorted = competitors.sortBy(_.order)
-    if sorted.isEmpty then return sorted
-
     // Group consecutive players by scoreStr to detect ties
     val grouped = sorted.foldLeft(List.empty[List[EspnCompetitor]]): (acc, c) =>
       acc match
-        case head :: tail if head.head.scoreStr == c.scoreStr && c.scoreStr.isDefined => (head :+ c) :: tail
+        case head :: tail if head.headOption.exists(_.scoreStr == c.scoreStr) && c.scoreStr.isDefined =>
+          (head :+ c) :: tail
         case _ => List(c) :: acc
     .reverse
 
-    var pos = 1
-    grouped.flatMap: group =>
-      val assignedPos = pos
-      pos += group.size
-      group.map(_.copy(position = assignedPos))
+    grouped.foldLeft((1, List.empty[EspnCompetitor])) { case ((pos, acc), group) =>
+      (pos + group.size, acc ++ group.map(_.copy(position = pos)))
+    }._2
 
   /** Fetch the season calendar from ESPN (embedded in any scoreboard response). */
   def fetchCalendar: IO[List[EspnCalendarEntry]] =

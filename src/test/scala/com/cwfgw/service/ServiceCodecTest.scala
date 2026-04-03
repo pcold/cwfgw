@@ -7,7 +7,7 @@ import munit.FunSuite
 import java.time.LocalDate
 import java.util.UUID
 
-import com.cwfgw.domain.given
+import com.cwfgw.domain.{ScoreBreakdown, given}
 import com.cwfgw.espn.EspnCalendarEntry
 
 /** Round-trip codec tests for service-layer DTOs. Verifies snake_case encoding and lossless encode/decode for all

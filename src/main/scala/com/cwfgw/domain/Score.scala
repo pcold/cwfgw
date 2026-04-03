@@ -4,6 +4,16 @@ import io.circe.derivation.ConfiguredCodec
 import java.util.UUID
 import java.time.Instant
 
+/** Breakdown of how a golfer's payout was calculated. */
+case class ScoreBreakdown(
+  position: Int,
+  numTied: Int,
+  basePayout: BigDecimal,
+  ownershipPct: BigDecimal,
+  payout: BigDecimal,
+  multiplier: BigDecimal
+) derives ConfiguredCodec
+
 case class FantasyScore(
   id: UUID,
   seasonId: UUID,

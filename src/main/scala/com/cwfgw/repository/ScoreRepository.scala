@@ -6,7 +6,6 @@ import doobie.implicits.*
 import doobie.postgres.implicits.*
 import java.util.UUID
 import com.cwfgw.domain.*
-import com.cwfgw.service.ScoreBreakdown
 
 object ScoreRepository:
 

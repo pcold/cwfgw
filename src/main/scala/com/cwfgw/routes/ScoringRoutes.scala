@@ -6,7 +6,6 @@ import org.http4s.dsl.io.*
 import org.http4s.circe.*
 import org.http4s.circe.CirceEntityCodec.*
 import io.circe.syntax.*
-import io.circe.Json
 import java.util.UUID
 import com.cwfgw.domain.*
 import com.cwfgw.service.ScoringService
@@ -21,7 +20,7 @@ object ScoringRoutes:
         Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "scoring" / "calculate" / UUIDVar(tournamentId) => service
         .calculateScores(seasonId, tournamentId).flatMap:
           case Right(result) => Ok(result.asJson)
-          case Left(err) => BadRequest(Json.obj("error" -> err.asJson))
+          case Left(err) => RouteHelpers.badRequest(err)
 
     case POST -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "scoring" / "refresh-standings" => service
         .refreshStandings(seasonId).flatMap(Ok(_))
@@ -29,4 +28,4 @@ object ScoringRoutes:
     case GET -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "scoring" / "side-bets" => service
         .getSideBetStandings(seasonId).flatMap:
           case Right(result) => Ok(result.asJson)
-          case Left(err) => BadRequest(Json.obj("error" -> err.asJson))
+          case Left(err) => RouteHelpers.badRequest(err)
