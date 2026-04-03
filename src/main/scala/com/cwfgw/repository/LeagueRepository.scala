@@ -8,16 +8,12 @@ import com.cwfgw.domain.*
 
 object LeagueRepository:
 
-  def findAll: ConnectionIO[List[League]] =
-    sql"SELECT id, name, created_at FROM leagues ORDER BY name"
-      .query[League].to[List]
+  def findAll: ConnectionIO[List[League]] = sql"SELECT id, name, created_at FROM leagues ORDER BY name".query[League]
+    .to[List]
 
-  def findById(id: UUID): ConnectionIO[Option[League]] =
-    sql"SELECT id, name, created_at FROM leagues WHERE id = $id"
-      .query[League].option
+  def findById(id: UUID): ConnectionIO[Option[League]] = sql"SELECT id, name, created_at FROM leagues WHERE id = $id"
+    .query[League].option
 
-  def create(req: CreateLeague): ConnectionIO[League] =
-    sql"""INSERT INTO leagues (name)
+  def create(req: CreateLeague): ConnectionIO[League] = sql"""INSERT INTO leagues (name)
           VALUES (${req.name})
-          RETURNING id, name, created_at"""
-      .query[League].unique
+          RETURNING id, name, created_at""".query[League].unique

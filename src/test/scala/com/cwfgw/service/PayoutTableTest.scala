@@ -11,31 +11,19 @@ class PayoutTableTest extends FunSuite:
 
   // ---------- Normal (non-tied) positions ----------
 
-  test("1st place pays $18") {
-    assertEquals(PayoutTable.tieSplitPayout(1, 1, x1, rules), BigDecimal(18))
-  }
+  test("1st place pays $18") { assertEquals(PayoutTable.tieSplitPayout(1, 1, x1, rules), BigDecimal(18)) }
 
-  test("2nd place pays $12") {
-    assertEquals(PayoutTable.tieSplitPayout(2, 1, x1, rules), BigDecimal(12))
-  }
+  test("2nd place pays $12") { assertEquals(PayoutTable.tieSplitPayout(2, 1, x1, rules), BigDecimal(12)) }
 
-  test("5th place pays $7") {
-    assertEquals(PayoutTable.tieSplitPayout(5, 1, x1, rules), BigDecimal(7))
-  }
+  test("5th place pays $7") { assertEquals(PayoutTable.tieSplitPayout(5, 1, x1, rules), BigDecimal(7)) }
 
-  test("10th place pays $2") {
-    assertEquals(PayoutTable.tieSplitPayout(10, 1, x1, rules), BigDecimal(2))
-  }
+  test("10th place pays $2") { assertEquals(PayoutTable.tieSplitPayout(10, 1, x1, rules), BigDecimal(2)) }
 
   // ---------- Outside top 10 ----------
 
-  test("11th place pays $0") {
-    assertEquals(PayoutTable.tieSplitPayout(11, 1, x1, rules), BigDecimal(0))
-  }
+  test("11th place pays $0") { assertEquals(PayoutTable.tieSplitPayout(11, 1, x1, rules), BigDecimal(0)) }
 
-  test("50th place pays $0") {
-    assertEquals(PayoutTable.tieSplitPayout(50, 1, x1, rules), BigDecimal(0))
-  }
+  test("50th place pays $0") { assertEquals(PayoutTable.tieSplitPayout(50, 1, x1, rules), BigDecimal(0)) }
 
   test("position outside top 10 with ties still pays $0") {
     assertEquals(PayoutTable.tieSplitPayout(11, 3, x1, rules), BigDecimal(0))
@@ -71,25 +59,17 @@ class PayoutTableTest extends FunSuite:
 
   // ---------- 2x multiplier (majors) ----------
 
-  test("1st place at 2x pays $36") {
-    assertEquals(PayoutTable.tieSplitPayout(1, 1, x2, rules), BigDecimal(36))
-  }
+  test("1st place at 2x pays $36") { assertEquals(PayoutTable.tieSplitPayout(1, 1, x2, rules), BigDecimal(36)) }
 
-  test("10th place at 2x pays $4") {
-    assertEquals(PayoutTable.tieSplitPayout(10, 1, x2, rules), BigDecimal(4))
-  }
+  test("10th place at 2x pays $4") { assertEquals(PayoutTable.tieSplitPayout(10, 1, x2, rules), BigDecimal(4)) }
 
-  test("T4 with 3 tied at 2x = $7 * 2 = $14") {
-    assertEquals(PayoutTable.tieSplitPayout(4, 3, x2, rules), BigDecimal(14))
-  }
+  test("T4 with 3 tied at 2x = $7 * 2 = $14") { assertEquals(PayoutTable.tieSplitPayout(4, 3, x2, rules), BigDecimal(14)) }
 
   test("T10 with 3 tied at 2x: floor $1 * 2 = $2") {
     assertEquals(PayoutTable.tieSplitPayout(10, 3, x2, rules), BigDecimal(2))
   }
 
-  test("outside top 10 at 2x still pays $0") {
-    assertEquals(PayoutTable.tieSplitPayout(11, 1, x2, rules), BigDecimal(0))
-  }
+  test("outside top 10 at 2x still pays $0") { assertEquals(PayoutTable.tieSplitPayout(11, 1, x2, rules), BigDecimal(0)) }
 
   // ---------- 1.5x multiplier ----------
 

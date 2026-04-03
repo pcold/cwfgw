@@ -10,35 +10,21 @@ import com.cwfgw.domain.*
 
 object TournamentRepository:
 
-  private val selectCols =
-    fr"""id, pga_tournament_id, name, season_id, start_date,
+  private val selectCols = fr"""id, pga_tournament_id, name, season_id, start_date,
          end_date, course_name, status, purse_amount,
          payout_multiplier, metadata, created_at"""
 
-  def findAll(
-      seasonId: Option[UUID],
-      status: Option[String]
-  ): ConnectionIO[List[Tournament]] =
+  def findAll(seasonId: Option[UUID], status: Option[String]): ConnectionIO[List[Tournament]] =
     val base = fr"SELECT" ++ selectCols ++ fr"FROM tournaments"
-    val conditions = List(
-      seasonId.map(id => fr"season_id = $id"),
-      status.map(s => fr"status = $s")
-    ).flatten
+    val conditions = List(seasonId.map(id => fr"season_id = $id"), status.map(s => fr"status = $s")).flatten
     val where =
-      if conditions.isEmpty then Fragment.empty
-      else
-        fr"WHERE" ++ conditions.reduceLeft((a, b) =>
-          a ++ fr"AND" ++ b
-        )
-    (base ++ where ++ fr"ORDER BY start_date DESC")
-      .query[Tournament].to[List]
+      if conditions.isEmpty then Fragment.empty else fr"WHERE" ++ conditions.reduceLeft((a, b) => a ++ fr"AND" ++ b)
+    (base ++ where ++ fr"ORDER BY start_date DESC").query[Tournament].to[List]
 
   def findById(id: UUID): ConnectionIO[Option[Tournament]] =
-    (fr"SELECT" ++ selectCols ++ fr"FROM tournaments WHERE id = $id")
-      .query[Tournament].option
+    (fr"SELECT" ++ selectCols ++ fr"FROM tournaments WHERE id = $id").query[Tournament].option
 
-  def create(req: CreateTournament): ConnectionIO[Tournament] =
-    sql"""INSERT INTO tournaments (
+  def create(req: CreateTournament): ConnectionIO[Tournament] = sql"""INSERT INTO tournaments (
             pga_tournament_id, name, season_id, start_date,
             end_date, course_name, purse_amount,
             payout_multiplier, metadata
@@ -48,13 +34,9 @@ object TournamentRepository:
             ${req.purseAmount},
             ${req.payoutMultiplier.getOrElse(BigDecimal(1))},
             ${req.metadata.getOrElse(Json.obj())}
-          ) RETURNING $selectCols"""
-      .query[Tournament].unique
+          ) RETURNING $selectCols""".query[Tournament].unique
 
-  def update(
-      id: UUID,
-      req: UpdateTournament
-  ): ConnectionIO[Option[Tournament]] =
+  def update(id: UUID, req: UpdateTournament): ConnectionIO[Option[Tournament]] =
     val sets = List(
       req.name.map(v => fr"name = $v"),
       req.startDate.map(v => fr"start_date = $v"),
@@ -62,32 +44,22 @@ object TournamentRepository:
       req.courseName.map(v => fr"course_name = $v"),
       req.status.map(v => fr"status = $v"),
       req.purseAmount.map(v => fr"purse_amount = $v"),
-      req.payoutMultiplier.map(v =>
-        fr"payout_multiplier = $v"
-      )
+      req.payoutMultiplier.map(v => fr"payout_multiplier = $v")
     ).flatten
     if sets.isEmpty then findById(id)
     else
       val setFragment = sets.reduceLeft((a, b) => a ++ fr"," ++ b)
-      (fr"UPDATE tournaments SET" ++ setFragment ++
-        fr"WHERE id = $id RETURNING" ++ selectCols)
-        .query[Tournament].option
+      (fr"UPDATE tournaments SET" ++ setFragment ++ fr"WHERE id = $id RETURNING" ++ selectCols).query[Tournament].option
 
-  def findResults(
-      tournamentId: UUID
-  ): ConnectionIO[List[TournamentResult]] =
+  def findResults(tournamentId: UUID): ConnectionIO[List[TournamentResult]] =
     sql"""SELECT id, tournament_id, golfer_id, position,
             score_to_par, total_strokes, earnings, round_scores,
             made_cut, metadata
           FROM tournament_results
           WHERE tournament_id = $tournamentId
-          ORDER BY position ASC NULLS LAST"""
-      .query[TournamentResult].to[List]
+          ORDER BY position ASC NULLS LAST""".query[TournamentResult].to[List]
 
-  def upsertResult(
-      tournamentId: UUID,
-      req: CreateTournamentResult
-  ): ConnectionIO[TournamentResult] =
+  def upsertResult(tournamentId: UUID, req: CreateTournamentResult): ConnectionIO[TournamentResult] =
     sql"""INSERT INTO tournament_results (
             tournament_id, golfer_id, position, score_to_par,
             total_strokes, earnings, round_scores, made_cut
@@ -104,5 +76,4 @@ object TournamentRepository:
             made_cut = EXCLUDED.made_cut
           RETURNING id, tournament_id, golfer_id, position,
             score_to_par, total_strokes, earnings, round_scores,
-            made_cut, metadata"""
-      .query[TournamentResult].unique
+            made_cut, metadata""".query[TournamentResult].unique

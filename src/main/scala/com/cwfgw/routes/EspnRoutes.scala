@@ -64,56 +64,29 @@ object EspnRoutes:
   )
 
   /** Public read-only routes. */
-  def routes(service: EspnImportService): HttpRoutes[IO] =
-    HttpRoutes.of[IO]:
-      case GET -> Root / "api" / "v1" / "espn" / "preview" / UUIDVar(seasonId)
-          :? DateParam(date) =>
-        service
-          .previewByDate(seasonId, date)
-          .flatMap(previews =>
-            Ok(Json.arr(previews.map(livePreviewToJson)*))
-          )
-          .handleErrorWith(e =>
-            BadRequest(Json.obj("error" -> e.getMessage.asJson))
-          )
+  def routes(service: EspnImportService): HttpRoutes[IO] = HttpRoutes.of[IO]:
+    case GET -> Root / "api" / "v1" / "espn" / "preview" / UUIDVar(seasonId) :? DateParam(date) => service
+        .previewByDate(seasonId, date).flatMap(previews => Ok(Json.arr(previews.map(livePreviewToJson)*)))
+        .handleErrorWith(e => BadRequest(Json.obj("error" -> e.getMessage.asJson)))
 
-      case GET -> Root / "api" / "v1" / "espn" / "calendar" =>
-        service.fetchCalendar
-          .flatMap: entries =>
-            Ok(Json.arr(entries.map(e =>
-              Json.obj(
-                "espn_id" -> e.id.asJson,
-                "name" -> e.label.asJson,
-                "start_date" -> e.startDate.asJson
-              )
-            )*))
-          .handleErrorWith(e =>
-            BadRequest(Json.obj("error" -> e.getMessage.asJson))
-          )
+    case GET -> Root / "api" / "v1" / "espn" / "calendar" => service.fetchCalendar.flatMap: entries =>
+        Ok(Json.arr(
+          entries
+            .map(e => Json.obj("espn_id" -> e.id.asJson, "name" -> e.label.asJson, "start_date" -> e.startDate.asJson))*
+        ))
+      .handleErrorWith(e => BadRequest(Json.obj("error" -> e.getMessage.asJson)))
 
   /** Admin-only import routes. */
-  def adminRoutes(service: EspnImportService): HttpRoutes[IO] =
-    HttpRoutes.of[IO]:
-      case POST -> Root / "api" / "v1" / "espn" / "import"
-          :? DateParam(date) =>
-        service
-          .importByDate(date)
-          .flatMap(results =>
-            Ok(Json.arr(results.map(resultToJson)*))
-          )
-          .handleErrorWith(e =>
-            BadRequest(Json.obj("error" -> e.getMessage.asJson))
-          )
+  def adminRoutes(service: EspnImportService): HttpRoutes[IO] = HttpRoutes.of[IO]:
+    case POST -> Root / "api" / "v1" / "espn" / "import" :? DateParam(date) => service.importByDate(date)
+        .flatMap(results => Ok(Json.arr(results.map(resultToJson)*)))
+        .handleErrorWith(e => BadRequest(Json.obj("error" -> e.getMessage.asJson)))
 
-      case POST -> Root / "api" / "v1" / "espn" / "import" / "tournament" / UUIDVar(tournamentId) =>
-        service.importForTournament(tournamentId).flatMap:
-          case Right(results) =>
-            Ok(Json.arr(results.map(resultToJson)*))
-          case Left(err) =>
-            BadRequest(Json.obj("error" -> err.asJson))
+    case POST -> Root / "api" / "v1" / "espn" / "import" / "tournament" / UUIDVar(tournamentId) => service
+        .importForTournament(tournamentId).flatMap:
+          case Right(results) => Ok(Json.arr(results.map(resultToJson)*))
+          case Left(err) => BadRequest(Json.obj("error" -> err.asJson))
 
-  private object DateParam
-      extends QueryParamDecoderMatcher[LocalDate]("date")
+  private object DateParam extends QueryParamDecoderMatcher[LocalDate]("date")
 
-  given QueryParamDecoder[LocalDate] =
-    QueryParamDecoder[String].map(LocalDate.parse)
+  given QueryParamDecoder[LocalDate] = QueryParamDecoder[String].map(LocalDate.parse)

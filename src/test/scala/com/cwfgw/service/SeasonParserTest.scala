@@ -143,8 +143,7 @@ class SeasonParserTest extends FunSuite:
   // ---------- Multiple lines ----------
 
   test("parse multiple tournament lines") {
-    val input =
-      """1 1 Jan 15-18 Sony Open
+    val input = """1 1 Jan 15-18 Sony Open
         |2 2 Jan 22-25 American Express
         |3 3 Jan 29-Feb1 Farmers Insurance Open""".stripMargin
     val result = SeasonParser.parse(input, 2026)
@@ -154,8 +153,7 @@ class SeasonParserTest extends FunSuite:
   }
 
   test("blank lines are skipped") {
-    val input =
-      """1 1 Jan 15-18 Sony Open
+    val input = """1 1 Jan 15-18 Sony Open
         |
         |2 2 Jan 22-25 American Express""".stripMargin
     val result = SeasonParser.parse(input, 2026)
@@ -197,8 +195,7 @@ class SeasonParserTest extends FunSuite:
   }
 
   test("error message includes line number") {
-    val input =
-      """1 1 Jan 15-18 Sony Open
+    val input = """1 1 Jan 15-18 Sony Open
         |2 2 Smarch 22-25 Bad Month Open""".stripMargin
     val result = SeasonParser.parse(input, 2026)
     assert(result.isLeft)

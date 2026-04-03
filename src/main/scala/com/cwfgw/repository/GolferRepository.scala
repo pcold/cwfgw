@@ -19,20 +19,17 @@ object GolferRepository:
       if activeOnly then Some(fr"active = true") else None,
       search.map(s => fr"(first_name ILIKE ${"%" + s + "%"} OR last_name ILIKE ${"%" + s + "%"})")
     ).flatten
-    val where = if conditions.isEmpty then Fragment.empty
-                else fr"WHERE" ++ conditions.reduceLeft((a, b) => a ++ fr"AND" ++ b)
-    (base ++ where ++ fr"ORDER BY world_ranking ASC NULLS LAST, last_name ASC")
-      .query[Golfer].to[List]
+    val where =
+      if conditions.isEmpty then Fragment.empty else fr"WHERE" ++ conditions.reduceLeft((a, b) => a ++ fr"AND" ++ b)
+    (base ++ where ++ fr"ORDER BY world_ranking ASC NULLS LAST, last_name ASC").query[Golfer].to[List]
 
-  def findById(id: UUID): ConnectionIO[Option[Golfer]] =
-    (fr"SELECT" ++ selectCols ++ fr"FROM golfers WHERE id = $id")
-      .query[Golfer].option
+  def findById(id: UUID): ConnectionIO[Option[Golfer]] = (fr"SELECT" ++ selectCols ++ fr"FROM golfers WHERE id = $id")
+    .query[Golfer].option
 
   def create(req: CreateGolfer): ConnectionIO[Golfer] =
     sql"""INSERT INTO golfers (pga_player_id, first_name, last_name, country, world_ranking)
           VALUES (${req.pgaPlayerId}, ${req.firstName}, ${req.lastName}, ${req.country}, ${req.worldRanking})
-          RETURNING $selectCols"""
-      .query[Golfer].unique
+          RETURNING $selectCols""".query[Golfer].unique
 
   def update(id: UUID, req: UpdateGolfer): ConnectionIO[Option[Golfer]] =
     val sets = List(

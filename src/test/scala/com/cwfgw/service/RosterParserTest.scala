@@ -7,8 +7,7 @@ class RosterParserTest extends FunSuite:
   // ---------- Single team parsing ----------
 
   test("parse a single team with all ownership explicit") {
-    val input =
-      """TEAM 1 BROWN
+    val input = """TEAM 1 BROWN
         |1 SCHEFFLER 75
         |2 ROSE 100
         |3 LOWRY 100""".stripMargin
@@ -22,8 +21,7 @@ class RosterParserTest extends FunSuite:
   }
 
   test("first pick round and ownership parsed correctly") {
-    val input =
-      """TEAM 1 BROWN
+    val input = """TEAM 1 BROWN
         |1 SCHEFFLER 75""".stripMargin
     val result = RosterParser.parse(input)
     val pick = result.toOption.get.head.picks.head
@@ -35,8 +33,7 @@ class RosterParserTest extends FunSuite:
   // ---------- Default ownership ----------
 
   test("ownership defaults to 100 when omitted") {
-    val input =
-      """TEAM 1 BROWN
+    val input = """TEAM 1 BROWN
         |1 SCHEFFLER
         |2 ROSE""".stripMargin
     val result = RosterParser.parse(input)
@@ -46,8 +43,7 @@ class RosterParserTest extends FunSuite:
   }
 
   test("mixed explicit and default ownership") {
-    val input =
-      """TEAM 1 BROWN
+    val input = """TEAM 1 BROWN
         |1 SCHEFFLER 75
         |2 ROSE
         |3 LOWRY 50""".stripMargin
@@ -61,8 +57,7 @@ class RosterParserTest extends FunSuite:
   // ---------- Multi-word player names ----------
 
   test("multi-word player name") {
-    val input =
-      """TEAM 1 BROWN
+    val input = """TEAM 1 BROWN
         |1 VAN ROOYEN 50""".stripMargin
     val result = RosterParser.parse(input)
     val pick = result.toOption.get.head.picks.head
@@ -71,8 +66,7 @@ class RosterParserTest extends FunSuite:
   }
 
   test("multi-word player name without ownership") {
-    val input =
-      """TEAM 1 BROWN
+    val input = """TEAM 1 BROWN
         |1 VAN ROOYEN""".stripMargin
     val result = RosterParser.parse(input)
     val pick = result.toOption.get.head.picks.head
@@ -83,8 +77,7 @@ class RosterParserTest extends FunSuite:
   // ---------- Multiple teams ----------
 
   test("parse multiple teams separated by blank lines") {
-    val input =
-      """TEAM 1 BROWN
+    val input = """TEAM 1 BROWN
         |1 SCHEFFLER 75
         |2 ROSE
         |
@@ -101,8 +94,7 @@ class RosterParserTest extends FunSuite:
   }
 
   test("shared player ownership across teams") {
-    val input =
-      """TEAM 1 BROWN
+    val input = """TEAM 1 BROWN
         |1 SCHEFFLER 75
         |
         |TEAM 7 WOMBLE
@@ -117,8 +109,7 @@ class RosterParserTest extends FunSuite:
   // ---------- Full 8-round roster ----------
 
   test("parse a full 8-round roster") {
-    val input =
-      """TEAM 1 BROWN
+    val input = """TEAM 1 BROWN
         |1 SCHEFFLER 75
         |2 ROSE
         |3 LOWRY
@@ -137,8 +128,7 @@ class RosterParserTest extends FunSuite:
   // ---------- Error cases ----------
 
   test("invalid team header returns Left") {
-    val input =
-      """NOT A TEAM HEADER
+    val input = """NOT A TEAM HEADER
         |1 SCHEFFLER""".stripMargin
     val result = RosterParser.parse(input)
     assert(result.isLeft)
@@ -146,16 +136,14 @@ class RosterParserTest extends FunSuite:
   }
 
   test("invalid team number returns Left") {
-    val input =
-      """TEAM abc BROWN
+    val input = """TEAM abc BROWN
         |1 SCHEFFLER""".stripMargin
     val result = RosterParser.parse(input)
     assert(result.isLeft)
   }
 
   test("missing player name returns Left") {
-    val input =
-      """TEAM 1 BROWN
+    val input = """TEAM 1 BROWN
         |1""".stripMargin
     val result = RosterParser.parse(input)
     assert(result.isLeft)
@@ -163,8 +151,7 @@ class RosterParserTest extends FunSuite:
   }
 
   test("invalid pick line returns Left") {
-    val input =
-      """TEAM 1 BROWN
+    val input = """TEAM 1 BROWN
         |abc SCHEFFLER""".stripMargin
     val result = RosterParser.parse(input)
     assert(result.isLeft)
@@ -179,8 +166,7 @@ class RosterParserTest extends FunSuite:
   }
 
   test("error includes team block number") {
-    val input =
-      """TEAM 1 BROWN
+    val input = """TEAM 1 BROWN
         |1 SCHEFFLER
         |
         |BAD HEADER

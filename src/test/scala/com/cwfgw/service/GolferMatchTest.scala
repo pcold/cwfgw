@@ -8,17 +8,23 @@ import java.util.UUID
 
 import com.cwfgw.domain.Golfer
 
-/** Tests for findGolferMatch — the pure golfer matching function
-  * extracted from EspnImportService. */
+/** Tests for findGolferMatch — the pure golfer matching function extracted from EspnImportService.
+  */
 class GolferMatchTest extends FunSuite:
 
   private val now = Instant.now()
 
-  private def golfer(id: Int, first: String, last: String, espnId: Option[String] = None): Golfer =
-    Golfer(
-      UUID.fromString(s"00000000-0000-0000-0000-00000000000$id"),
-      espnId, first, last, None, None, true, Json.obj(), now
-    )
+  private def golfer(id: Int, first: String, last: String, espnId: Option[String] = None): Golfer = Golfer(
+    UUID.fromString(s"00000000-0000-0000-0000-00000000000$id"),
+    espnId,
+    first,
+    last,
+    None,
+    None,
+    true,
+    Json.obj(),
+    now
+  )
 
   private val scheffler = golfer(1, "Scottie", "Scheffler")
   private val mcilroy = golfer(2, "Rory", "McIlroy")
@@ -175,8 +181,7 @@ class GolferMatchTest extends FunSuite:
     val golfers = List(scheffler, svensson)
     val result = findGolferMatch("J. Svensson", "espn8", golfers)
     result match
-      case GolferMatchResult.LastNameMatch(g) =>
-        assertEquals(g.id, svensson.id)
+      case GolferMatchResult.LastNameMatch(g) => assertEquals(g.id, svensson.id)
       case other => fail(s"Expected LastNameMatch, got $other")
   }
 

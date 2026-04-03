@@ -15,23 +15,15 @@ package com.cwfgw.service
   * ...
   * }}}
   *
-  * - `TEAM {number} {name}` starts each team block
-  * - `{round} {player_name} [{ownership_pct}]` — ownership % only when not 100
-  * - Blank line between teams
+  *   - `TEAM {number} {name}` starts each team block
+  *   - `{round} {player_name} [{ownership_pct}]` — ownership % only when not 100
+  *   - Blank line between teams
   */
 object RosterParser:
 
-  case class ParsedTeam(
-      teamNumber: Int,
-      teamName: String,
-      picks: List[ParsedPick]
-  )
+  case class ParsedTeam(teamNumber: Int, teamName: String, picks: List[ParsedPick])
 
-  case class ParsedPick(
-      round: Int,
-      playerName: String,
-      ownershipPct: Int
-  )
+  case class ParsedPick(round: Int, playerName: String, ownershipPct: Int)
 
   def parse(text: String): Either[String, List[ParsedTeam]] =
     val lines = text.trim.linesIterator.toList
@@ -39,8 +31,7 @@ object RosterParser:
     val results = teams.zipWithIndex.map: (block, idx) =>
       parseTeamBlock(block).left.map(err => s"Team block ${idx + 1}: $err")
     val errors = results.collect { case Left(e) => e }
-    if errors.nonEmpty then Left(errors.mkString("\n"))
-    else Right(results.collect { case Right(t) => t })
+    if errors.nonEmpty then Left(errors.mkString("\n")) else Right(results.collect { case Right(t) => t })
 
   private def splitIntoTeamBlocks(lines: List[String]): List[List[String]] =
     val blocks = scala.collection.mutable.ListBuffer[List[String]]()
@@ -51,27 +42,23 @@ object RosterParser:
         if current.nonEmpty then
           blocks += current.toList
           current.clear()
-      else
-        current += trimmed
+      else current += trimmed
     if current.nonEmpty then blocks += current.toList
     blocks.toList
 
-  private def parseTeamBlock(lines: List[String]): Either[String, ParsedTeam] =
-    lines match
-      case Nil => Left("Empty team block")
-      case header :: picks =>
-        parseTeamHeader(header).flatMap: (teamNum, teamName) =>
-          val pickResults = picks.map(parsePick)
-          val errors = pickResults.collect { case Left(e) => e }
-          if errors.nonEmpty then Left(s"$teamName: ${errors.mkString("; ")}")
-          else Right(ParsedTeam(teamNum, teamName, pickResults.collect { case Right(p) => p }))
+  private def parseTeamBlock(lines: List[String]): Either[String, ParsedTeam] = lines match
+    case Nil => Left("Empty team block")
+    case header :: picks => parseTeamHeader(header).flatMap: (teamNum, teamName) =>
+        val pickResults = picks.map(parsePick)
+        val errors = pickResults.collect { case Left(e) => e }
+        if errors.nonEmpty then Left(s"$teamName: ${errors.mkString("; ")}")
+        else Right(ParsedTeam(teamNum, teamName, pickResults.collect { case Right(p) => p }))
 
   private def parseTeamHeader(line: String): Either[String, (Int, String)] =
     // TEAM 1 BROWN
     val tokens = line.split("\\s+", 3).toList
     tokens match
-      case "TEAM" :: numStr :: name :: Nil =>
-        numStr.toIntOption match
+      case "TEAM" :: numStr :: name :: Nil => numStr.toIntOption match
           case Some(num) => Right((num, name.trim))
           case None => Left(s"Invalid team number: '$numStr'")
       case _ => Left(s"Invalid team header: '$line' — expected: TEAM {number} {name}")
@@ -87,5 +74,4 @@ object RosterParser:
           case _ => (rest, 100)
         if nameParts.isEmpty then Left(s"Missing player name on line: '$line'")
         else Right(ParsedPick(round, nameParts.mkString(" "), pct))
-      case _ =>
-        Left(s"Invalid pick line: '$line' — expected: {round} {player_name} [{ownership_pct}]")
+      case _ => Left(s"Invalid pick line: '$line' — expected: {round} {player_name} [{ownership_pct}]")

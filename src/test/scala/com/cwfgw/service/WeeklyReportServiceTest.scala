@@ -12,13 +12,12 @@ import java.time.{Instant, LocalDate}
 
 import com.cwfgw.domain.{SeasonRules, Tournament}
 
-/**
- * Tests for WeeklyReportService.mergeLiveData — a pure JSON -> JSON
- * transformation that overlays ESPN live data onto a base report.
- *
- * We construct minimal base-report JSON and EspnLivePreview objects, then
- * verify the merged output has correct weekly totals, subtotals, and rankings.
- */
+/** Tests for WeeklyReportService.mergeLiveData — a pure JSON -> JSON transformation that overlays ESPN live data onto a
+  * base report.
+  *
+  * We construct minimal base-report JSON and EspnLivePreview objects, then verify the merged output has correct weekly
+  * totals, subtotals, and rankings.
+  */
 class WeeklyReportServiceTest extends FunSuite:
 
   // We only need a WeeklyReportService instance to call mergeLiveData.
@@ -26,10 +25,7 @@ class WeeklyReportServiceTest extends FunSuite:
   // is a pure method that doesn't touch them — so we pass nulls.
   private given LoggerFactory[IO] = NoOpFactory[IO]
 
-  private val service = new WeeklyReportService(
-    espnImportService = null,
-    xa = null
-  )
+  private val service = new WeeklyReportService(espnImportService = null, xa = null)
 
   // ---- Helpers ----
 
@@ -41,38 +37,37 @@ class WeeklyReportServiceTest extends FunSuite:
   private val golfer4Id = UUID.fromString("00000000-0000-0000-0000-000000000014")
 
   private def baseRow(
-      round: Int,
-      golferId: UUID,
-      golferName: String,
-      earnings: BigDecimal = BigDecimal(0),
-      topTens: Int = 0,
-      seasonEarnings: BigDecimal = BigDecimal(0),
-      seasonTopTens: Int = 0
-  ): Json =
-    Json.obj(
-      "round" -> round.asJson,
-      "golfer_name" -> golferName.asJson,
-      "golfer_id" -> golferId.toString.asJson,
-      "position_str" -> Json.Null,
-      "score_to_par" -> Json.Null,
-      "earnings" -> earnings.asJson,
-      "top_tens" -> topTens.asJson,
-      "ownership_pct" -> BigDecimal(100).asJson,
-      "season_earnings" -> seasonEarnings.asJson,
-      "season_top_tens" -> seasonTopTens.asJson
-    )
+    round: Int,
+    golferId: UUID,
+    golferName: String,
+    earnings: BigDecimal = BigDecimal(0),
+    topTens: Int = 0,
+    seasonEarnings: BigDecimal = BigDecimal(0),
+    seasonTopTens: Int = 0
+  ): Json = Json.obj(
+    "round" -> round.asJson,
+    "golfer_name" -> golferName.asJson,
+    "golfer_id" -> golferId.toString.asJson,
+    "position_str" -> Json.Null,
+    "score_to_par" -> Json.Null,
+    "earnings" -> earnings.asJson,
+    "top_tens" -> topTens.asJson,
+    "ownership_pct" -> BigDecimal(100).asJson,
+    "season_earnings" -> seasonEarnings.asJson,
+    "season_top_tens" -> seasonTopTens.asJson
+  )
 
   private def teamJson(
-      teamId: UUID,
-      teamName: String,
-      ownerName: String,
-      rows: List[Json],
-      previous: BigDecimal = BigDecimal(0),
-      sideBets: BigDecimal = BigDecimal(0),
-      topTenCount: Int = 0
+    teamId: UUID,
+    teamName: String,
+    ownerName: String,
+    rows: List[Json],
+    previous: BigDecimal = BigDecimal(0),
+    sideBets: BigDecimal = BigDecimal(0),
+    topTenCount: Int = 0
   ): Json =
-    val topTens = rows.foldLeft(BigDecimal(0))((acc, r) =>
-      acc + r.hcursor.downField("earnings").as[BigDecimal].getOrElse(BigDecimal(0)))
+    val topTens = rows
+      .foldLeft(BigDecimal(0))((acc, r) => acc + r.hcursor.downField("earnings").as[BigDecimal].getOrElse(BigDecimal(0)))
     Json.obj(
       "team_id" -> teamId.toString.asJson,
       "team_name" -> teamName.asJson,
@@ -87,30 +82,29 @@ class WeeklyReportServiceTest extends FunSuite:
       "total_cash" -> (previous + sideBets).asJson
     )
 
-  private def baseReport(teams: List[Json]): Json =
-    Json.obj(
-      "tournament" -> Json.obj(
-        "id" -> Json.Null,
-        "name" -> "Test Open".asJson,
-        "start_date" -> "2026-03-26".asJson,
-        "end_date" -> "2026-03-29".asJson,
-        "status" -> "in_progress".asJson,
-        "payout_multiplier" -> BigDecimal(1).asJson
-      ),
-      "teams" -> teams.asJson,
-      "undrafted_top_tens" -> Json.arr(),
-      "standings_order" -> Json.arr()
-    )
+  private def baseReport(teams: List[Json]): Json = Json.obj(
+    "tournament" -> Json.obj(
+      "id" -> Json.Null,
+      "name" -> "Test Open".asJson,
+      "start_date" -> "2026-03-26".asJson,
+      "end_date" -> "2026-03-29".asJson,
+      "status" -> "in_progress".asJson,
+      "payout_multiplier" -> BigDecimal(1).asJson
+    ),
+    "teams" -> teams.asJson,
+    "undrafted_top_tens" -> Json.arr(),
+    "standings_order" -> Json.arr()
+  )
 
   private def golferScore(
-      golferName: String,
-      golferId: UUID,
-      position: Int,
-      numTied: Int,
-      scoreToPar: Option[Int],
-      basePayout: BigDecimal,
-      ownershipPct: BigDecimal,
-      payout: BigDecimal
+    golferName: String,
+    golferId: UUID,
+    position: Int,
+    numTied: Int,
+    scoreToPar: Option[Int],
+    basePayout: BigDecimal,
+    ownershipPct: BigDecimal,
+    payout: BigDecimal
   ): PreviewGolferScore =
     PreviewGolferScore(golferName, golferId, position, numTied, scoreToPar, basePayout, ownershipPct, payout)
 
@@ -137,8 +131,15 @@ class WeeklyReportServiceTest extends FunSuite:
       payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice", BigDecimal(18),
-          List(golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18)))),
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
+          BigDecimal(18),
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
+        ),
         PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
@@ -167,11 +168,21 @@ class WeeklyReportServiceTest extends FunSuite:
     ))
 
     val preview = EspnLivePreview(
-      espnName = "Test Open", espnId = "123", completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Test Open",
+      espnId = "123",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice", BigDecimal(18),
-          List(golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18)))),
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
+          BigDecimal(18),
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
+        ),
         PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
@@ -195,11 +206,21 @@ class WeeklyReportServiceTest extends FunSuite:
     ))
 
     val preview = EspnLivePreview(
-      espnName = "Test Open", espnId = "123", completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Test Open",
+      espnId = "123",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice", BigDecimal(12),
-          List(golferScore("Scottie Scheffler", golfer1Id, 2, 1, Some(-8), BigDecimal(12), BigDecimal(100), BigDecimal(12)))),
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
+          BigDecimal(12),
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 2, 1, Some(-8), BigDecimal(12), BigDecimal(100), BigDecimal(12))
+          )
+        ),
         PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
@@ -219,14 +240,29 @@ class WeeklyReportServiceTest extends FunSuite:
 
   test("mergeLiveData includes side bets in total cash") {
     val report = baseReport(List(
-      teamJson(teamAId, "Team A", "Alice", List(baseRow(1, golfer1Id, "SCHEFFLER")),
-        previous = BigDecimal(50), sideBets = BigDecimal(20)),
-      teamJson(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")),
-        previous = BigDecimal(30), sideBets = BigDecimal(-10))
+      teamJson(
+        teamAId,
+        "Team A",
+        "Alice",
+        List(baseRow(1, golfer1Id, "SCHEFFLER")),
+        previous = BigDecimal(50),
+        sideBets = BigDecimal(20)
+      ),
+      teamJson(
+        teamBId,
+        "Team B",
+        "Bob",
+        List(baseRow(1, golfer2Id, "MCILROY")),
+        previous = BigDecimal(30),
+        sideBets = BigDecimal(-10)
+      )
     ))
 
     val preview = EspnLivePreview(
-      espnName = "Test Open", espnId = "123", completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Test Open",
+      espnId = "123",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(teamAId, "Team A", "Alice", BigDecimal(0), Nil),
@@ -254,7 +290,10 @@ class WeeklyReportServiceTest extends FunSuite:
     ))
 
     val preview = EspnLivePreview(
-      espnName = "Test Open", espnId = "123", completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Test Open",
+      espnId = "123",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(teamAId, "Team A", "Alice", BigDecimal(0), Nil),
@@ -275,21 +314,28 @@ class WeeklyReportServiceTest extends FunSuite:
 
   test("mergeLiveData zeroes earnings for unmatched golfers") {
     // golfer3Id is on a roster but not in the live preview data
-    val rows = List(
-      baseRow(1, golfer1Id, "SCHEFFLER"),
-      baseRow(2, golfer3Id, "NOBODY")
-    )
+    val rows = List(baseRow(1, golfer1Id, "SCHEFFLER"), baseRow(2, golfer3Id, "NOBODY"))
     val report = baseReport(List(
       teamJson(teamAId, "Team A", "Alice", rows),
       teamJson(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")))
     ))
 
     val preview = EspnLivePreview(
-      espnName = "Test Open", espnId = "123", completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Test Open",
+      espnId = "123",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice", BigDecimal(18),
-          List(golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18)))),
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
+          BigDecimal(18),
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
+        ),
         PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
@@ -312,21 +358,35 @@ class WeeklyReportServiceTest extends FunSuite:
 
     // Both golfers at position 3 (tied)
     val preview = EspnLivePreview(
-      espnName = "Test Open", espnId = "123", completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Test Open",
+      espnId = "123",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice", BigDecimal(10),
-          List(golferScore("Scottie Scheffler", golfer1Id, 3, 2, Some(-5), BigDecimal(10), BigDecimal(100), BigDecimal(10)))),
-        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(10),
-          List(golferScore("Rory McIlroy", golfer2Id, 3, 2, Some(-5), BigDecimal(10), BigDecimal(100), BigDecimal(10))))
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
+          BigDecimal(10),
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 3, 2, Some(-5), BigDecimal(10), BigDecimal(100), BigDecimal(10))
+          )
+        ),
+        PreviewTeamScore(
+          teamBId,
+          "Team B",
+          "Bob",
+          BigDecimal(10),
+          List(golferScore("Rory McIlroy", golfer2Id, 3, 2, Some(-5), BigDecimal(10), BigDecimal(100), BigDecimal(10)))
+        )
       ),
       leaderboard = Nil
     )
 
     val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
     val resultTeams = result.hcursor.downField("teams").as[List[Json]].getOrElse(Nil)
-    val posStr = resultTeams(0).hcursor.downField("rows").downArray
-      .downField("position_str").as[String].getOrElse("")
+    val posStr = resultTeams(0).hcursor.downField("rows").downArray.downField("position_str").as[String].getOrElse("")
 
     // Two golfers at position 3 => T3
     assertEquals(posStr, "T3")
@@ -339,27 +399,40 @@ class WeeklyReportServiceTest extends FunSuite:
     ))
 
     val preview = EspnLivePreview(
-      espnName = "Test Open", espnId = "123", completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Test Open",
+      espnId = "123",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice", BigDecimal(18),
-          List(golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-12), BigDecimal(18), BigDecimal(100), BigDecimal(18)))),
-        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(12),
-          List(golferScore("Rory McIlroy", golfer2Id, 2, 1, Some(-10), BigDecimal(12), BigDecimal(100), BigDecimal(12))))
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
+          BigDecimal(18),
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-12), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
+        ),
+        PreviewTeamScore(
+          teamBId,
+          "Team B",
+          "Bob",
+          BigDecimal(12),
+          List(golferScore("Rory McIlroy", golfer2Id, 2, 1, Some(-10), BigDecimal(12), BigDecimal(100), BigDecimal(12)))
+        )
       ),
       leaderboard = Nil
     )
 
     val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
     val resultTeams = result.hcursor.downField("teams").as[List[Json]].getOrElse(Nil)
-    val posStr = resultTeams(0).hcursor.downField("rows").downArray
-      .downField("position_str").as[String].getOrElse("")
+    val posStr = resultTeams(0).hcursor.downField("rows").downArray.downField("position_str").as[String].getOrElse("")
     assertEquals(posStr, "1")
   }
 
   test("mergeLiveData handles partial ownership correctly") {
-    val row = baseRow(1, golfer1Id, "SCHEFFLER").deepMerge(
-      Json.obj("ownership_pct" -> BigDecimal(75).asJson))
+    val row = baseRow(1, golfer1Id, "SCHEFFLER").deepMerge(Json.obj("ownership_pct" -> BigDecimal(75).asJson))
     val report = baseReport(List(
       teamJson(teamAId, "Team A", "Alice", List(row)),
       teamJson(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")))
@@ -367,11 +440,28 @@ class WeeklyReportServiceTest extends FunSuite:
 
     // golfer1 earns $18 but Team A only owns 75%
     val preview = EspnLivePreview(
-      espnName = "Test Open", espnId = "123", completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Test Open",
+      espnId = "123",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice", BigDecimal("13.5"),
-          List(golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(75), BigDecimal("13.5")))),
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
+          BigDecimal("13.5"),
+          List(golferScore(
+            "Scottie Scheffler",
+            golfer1Id,
+            1,
+            1,
+            Some(-10),
+            BigDecimal(18),
+            BigDecimal(75),
+            BigDecimal("13.5")
+          ))
+        ),
         PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
@@ -379,30 +469,35 @@ class WeeklyReportServiceTest extends FunSuite:
 
     val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
     val resultTeams = result.hcursor.downField("teams").as[List[Json]].getOrElse(Nil)
-    val earnings = resultTeams(0).hcursor.downField("rows").downArray
-      .downField("earnings").as[BigDecimal].getOrElse(BigDecimal(-1))
+    val earnings = resultTeams(0).hcursor.downField("rows").downArray.downField("earnings").as[BigDecimal]
+      .getOrElse(BigDecimal(-1))
     assertEquals(earnings, BigDecimal("13.5"))
   }
 
   test("mergeLiveData with multiple golfers on same team") {
-    val rows = List(
-      baseRow(1, golfer1Id, "SCHEFFLER"),
-      baseRow(2, golfer2Id, "MCILROY")
-    )
+    val rows = List(baseRow(1, golfer1Id, "SCHEFFLER"), baseRow(2, golfer2Id, "MCILROY"))
     val report = baseReport(List(
       teamJson(teamAId, "Team A", "Alice", rows),
       teamJson(teamBId, "Team B", "Bob", List(baseRow(1, golfer3Id, "RAHM")))
     ))
 
     val preview = EspnLivePreview(
-      espnName = "Test Open", espnId = "123", completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Test Open",
+      espnId = "123",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice", BigDecimal(30),
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
+          BigDecimal(30),
           List(
             golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-12), BigDecimal(18), BigDecimal(100), BigDecimal(18)),
             golferScore("Rory McIlroy", golfer2Id, 2, 1, Some(-10), BigDecimal(12), BigDecimal(100), BigDecimal(12))
-          )),
+          )
+        ),
         PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
@@ -435,13 +530,28 @@ class WeeklyReportServiceTest extends FunSuite:
     // Team B weekly = $12*3 - $30 = $6
     // Team C weekly = $0*3 - $30 = -$30
     val preview = EspnLivePreview(
-      espnName = "Test Open", espnId = "123", completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Test Open",
+      espnId = "123",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice", BigDecimal(18),
-          List(golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-12), BigDecimal(18), BigDecimal(100), BigDecimal(18)))),
-        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(12),
-          List(golferScore("Rory McIlroy", golfer2Id, 2, 1, Some(-10), BigDecimal(12), BigDecimal(100), BigDecimal(12)))),
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
+          BigDecimal(18),
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-12), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
+        ),
+        PreviewTeamScore(
+          teamBId,
+          "Team B",
+          "Bob",
+          BigDecimal(12),
+          List(golferScore("Rory McIlroy", golfer2Id, 2, 1, Some(-10), BigDecimal(12), BigDecimal(100), BigDecimal(12)))
+        ),
         PreviewTeamScore(teamCId, "Team C", "Charlie", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
@@ -461,27 +571,36 @@ class WeeklyReportServiceTest extends FunSuite:
   }
 
   test("mergeLiveData updates season_earnings and season_top_tens") {
-    val row = baseRow(1, golfer1Id, "SCHEFFLER").deepMerge(
-      Json.obj("season_earnings" -> BigDecimal(50).asJson, "season_top_tens" -> 3.asJson))
+    val row = baseRow(1, golfer1Id, "SCHEFFLER")
+      .deepMerge(Json.obj("season_earnings" -> BigDecimal(50).asJson, "season_top_tens" -> 3.asJson))
     val report = baseReport(List(
       teamJson(teamAId, "Team A", "Alice", List(row)),
       teamJson(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")))
     ))
 
     val preview = EspnLivePreview(
-      espnName = "Test Open", espnId = "123", completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Test Open",
+      espnId = "123",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice", BigDecimal(18),
-          List(golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18)))),
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
+          BigDecimal(18),
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
+        ),
         PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
     val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
-    val teamARows = result.hcursor.downField("teams").downArray
-      .downField("rows").downArray
+    val teamARows = result.hcursor.downField("teams").downArray.downField("rows").downArray
     val seasonEarnings = teamARows.downField("season_earnings").as[BigDecimal].getOrElse(BigDecimal(-1))
     val seasonTopTens = teamARows.downField("season_top_tens").as[Int].getOrElse(-1)
 
@@ -498,13 +617,28 @@ class WeeklyReportServiceTest extends FunSuite:
     ))
 
     val preview = EspnLivePreview(
-      espnName = "Test Open", espnId = "123", completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Test Open",
+      espnId = "123",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice", BigDecimal(18),
-          List(golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18)))),
-        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(12),
-          List(golferScore("Rory McIlroy", golfer2Id, 2, 1, Some(0), BigDecimal(12), BigDecimal(100), BigDecimal(12))))
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
+          BigDecimal(18),
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
+        ),
+        PreviewTeamScore(
+          teamBId,
+          "Team B",
+          "Bob",
+          BigDecimal(12),
+          List(golferScore("Rory McIlroy", golfer2Id, 2, 1, Some(0), BigDecimal(12), BigDecimal(100), BigDecimal(12)))
+        )
       ),
       leaderboard = Nil
     )
@@ -513,122 +647,124 @@ class WeeklyReportServiceTest extends FunSuite:
     val resultTeams = result.hcursor.downField("teams").as[List[Json]].getOrElse(Nil)
 
     // Team A golfer: -10 should be "-10"
-    val stpA = resultTeams(0).hcursor.downField("rows").downArray
-      .downField("score_to_par").as[String].getOrElse("")
+    val stpA = resultTeams(0).hcursor.downField("rows").downArray.downField("score_to_par").as[String].getOrElse("")
     assertEquals(stpA, "-10")
 
     // Team B golfer: 0 should be "E"
-    val stpB = resultTeams(1).hcursor.downField("rows").downArray
-      .downField("score_to_par").as[String].getOrElse("")
+    val stpB = resultTeams(1).hcursor.downField("rows").downArray.downField("score_to_par").as[String].getOrElse("")
     assertEquals(stpB, "E")
   }
 
   // ---- Additive mode tests (season report live overlay) ----
 
   test("mergeLiveData additive mode adds live earnings to base") {
-    val rows = List(
-      baseRow(1, golfer1Id, "SCHEFFLER",
-        earnings = BigDecimal(20), topTens = 2,
-        seasonEarnings = BigDecimal(20), seasonTopTens = 2)
-    )
+    val rows = List(baseRow(
+      1,
+      golfer1Id,
+      "SCHEFFLER",
+      earnings = BigDecimal(20),
+      topTens = 2,
+      seasonEarnings = BigDecimal(20),
+      seasonTopTens = 2
+    ))
     val report = baseReport(List(
       teamJson(teamAId, "Team A", "Alice", rows),
-      teamJson(teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY",
-          earnings = BigDecimal(15), topTens = 1,
-          seasonEarnings = BigDecimal(15), seasonTopTens = 1)))
+      teamJson(
+        teamBId,
+        "Team B",
+        "Bob",
+        List(baseRow(
+          1,
+          golfer2Id,
+          "MCILROY",
+          earnings = BigDecimal(15),
+          topTens = 1,
+          seasonEarnings = BigDecimal(15),
+          seasonTopTens = 1
+        ))
+      )
     ))
 
     val preview = EspnLivePreview(
-      espnName = "Test Open", espnId = "123",
-      completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Test Open",
+      espnId = "123",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice",
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore("Scottie Scheffler", golfer1Id,
-            1, 1, Some(-10), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)))),
-        PreviewTeamScore(teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil)
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
+        ),
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default,
-      additive = true
-    )
-    val resultTeams = result.hcursor.downField("teams")
-      .as[List[Json]].getOrElse(Nil)
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default, additive = true)
+    val resultTeams = result.hcursor.downField("teams").as[List[Json]].getOrElse(Nil)
 
     // Team A: base $20 + live $18 = $38
-    val earningsA = resultTeams(0).hcursor.downField("rows")
-      .downArray.downField("earnings")
-      .as[BigDecimal].getOrElse(BigDecimal(-1))
+    val earningsA = resultTeams(0).hcursor.downField("rows").downArray.downField("earnings").as[BigDecimal]
+      .getOrElse(BigDecimal(-1))
     assertEquals(earningsA, BigDecimal(38))
 
     // Top tens: base 2 + 1 live = 3
-    val topTensA = resultTeams(0).hcursor.downField("rows")
-      .downArray.downField("top_tens")
-      .as[Int].getOrElse(-1)
+    val topTensA = resultTeams(0).hcursor.downField("rows").downArray.downField("top_tens").as[Int].getOrElse(-1)
     assertEquals(topTensA, 3)
 
     // Season earnings: 20 + 18 = 38
-    val seasonEarningsA = resultTeams(0).hcursor
-      .downField("rows").downArray
-      .downField("season_earnings")
-      .as[BigDecimal].getOrElse(BigDecimal(-1))
+    val seasonEarningsA = resultTeams(0).hcursor.downField("rows").downArray.downField("season_earnings").as[BigDecimal]
+      .getOrElse(BigDecimal(-1))
     assertEquals(seasonEarningsA, BigDecimal(38))
   }
 
   test("additive mode keeps base earnings for unmatched golfers") {
     val rows = List(
-      baseRow(1, golfer1Id, "SCHEFFLER",
-        earnings = BigDecimal(20), topTens = 2),
-      baseRow(2, golfer3Id, "NOBODY",
-        earnings = BigDecimal(10), topTens = 1)
+      baseRow(1, golfer1Id, "SCHEFFLER", earnings = BigDecimal(20), topTens = 2),
+      baseRow(2, golfer3Id, "NOBODY", earnings = BigDecimal(10), topTens = 1)
     )
     val report = baseReport(List(
       teamJson(teamAId, "Team A", "Alice", rows),
-      teamJson(teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY")))
+      teamJson(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")))
     ))
 
     val preview = EspnLivePreview(
-      espnName = "Test Open", espnId = "123",
-      completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Test Open",
+      espnId = "123",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice",
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore("Scottie Scheffler", golfer1Id,
-            1, 1, Some(-10), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)))),
-        PreviewTeamScore(teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil)
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
+        ),
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default,
-      additive = true
-    )
-    val resultTeams = result.hcursor.downField("teams")
-      .as[List[Json]].getOrElse(Nil)
-    val teamARows = resultTeams(0).hcursor.downField("rows")
-      .as[List[Json]].getOrElse(Nil)
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default, additive = true)
+    val resultTeams = result.hcursor.downField("teams").as[List[Json]].getOrElse(Nil)
+    val teamARows = resultTeams(0).hcursor.downField("rows").as[List[Json]].getOrElse(Nil)
 
     // golfer3 not in live data — keeps base $10
-    val earningsR2 = teamARows(1).hcursor
-      .downField("earnings")
-      .as[BigDecimal].getOrElse(BigDecimal(-1))
+    val earningsR2 = teamARows(1).hcursor.downField("earnings").as[BigDecimal].getOrElse(BigDecimal(-1))
     assertEquals(earningsR2, BigDecimal(10))
 
     // golfer3 keeps base top_tens = 1
-    val topTensR2 = teamARows(1).hcursor
-      .downField("top_tens").as[Int].getOrElse(-1)
+    val topTensR2 = teamARows(1).hcursor.downField("top_tens").as[Int].getOrElse(-1)
     assertEquals(topTensR2, 1)
   }
 
@@ -639,43 +775,36 @@ class WeeklyReportServiceTest extends FunSuite:
     // A zero-sum = $38*2 - $53 = $23
     // B zero-sum = $15*2 - $53 = -$23
     val report = baseReport(List(
-      teamJson(teamAId, "Team A", "Alice",
-        List(baseRow(1, golfer1Id, "SCHEFFLER",
-          earnings = BigDecimal(20)))),
-      teamJson(teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY",
-          earnings = BigDecimal(15))))
+      teamJson(teamAId, "Team A", "Alice", List(baseRow(1, golfer1Id, "SCHEFFLER", earnings = BigDecimal(20)))),
+      teamJson(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY", earnings = BigDecimal(15))))
     ))
 
     val preview = EspnLivePreview(
-      espnName = "Test Open", espnId = "123",
-      completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Test Open",
+      espnId = "123",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice",
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore("Scottie Scheffler", golfer1Id,
-            1, 1, Some(-10), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)))),
-        PreviewTeamScore(teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil)
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
+        ),
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default,
-      additive = true
-    )
-    val resultTeams = result.hcursor.downField("teams")
-      .as[List[Json]].getOrElse(Nil)
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default, additive = true)
+    val resultTeams = result.hcursor.downField("teams").as[List[Json]].getOrElse(Nil)
 
-    val weeklyA = resultTeams(0).hcursor
-      .downField("weekly_total")
-      .as[BigDecimal].getOrElse(BigDecimal(-999))
-    val weeklyB = resultTeams(1).hcursor
-      .downField("weekly_total")
-      .as[BigDecimal].getOrElse(BigDecimal(-999))
+    val weeklyA = resultTeams(0).hcursor.downField("weekly_total").as[BigDecimal].getOrElse(BigDecimal(-999))
+    val weeklyB = resultTeams(1).hcursor.downField("weekly_total").as[BigDecimal].getOrElse(BigDecimal(-999))
 
     assertEquals(weeklyA, BigDecimal(23))
     assertEquals(weeklyB, BigDecimal(-23))
@@ -687,42 +816,38 @@ class WeeklyReportServiceTest extends FunSuite:
     // one with 1. Live adds 1 to the first golfer.
     // Expected top_ten_count = (3+1) + 1 = 5
     val rows = List(
-      baseRow(1, golfer1Id, "SCHEFFLER",
-        earnings = BigDecimal(30), topTens = 3),
-      baseRow(2, golfer3Id, "RAHM",
-        earnings = BigDecimal(10), topTens = 1)
+      baseRow(1, golfer1Id, "SCHEFFLER", earnings = BigDecimal(30), topTens = 3),
+      baseRow(2, golfer3Id, "RAHM", earnings = BigDecimal(10), topTens = 1)
     )
     val report = baseReport(List(
-      teamJson(teamAId, "Team A", "Alice", rows,
-        topTenCount = 4),
-      teamJson(teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY")))
+      teamJson(teamAId, "Team A", "Alice", rows, topTenCount = 4),
+      teamJson(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")))
     ))
 
     val preview = EspnLivePreview(
-      espnName = "Test Open", espnId = "123",
-      completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Test Open",
+      espnId = "123",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice",
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore("Scottie Scheffler", golfer1Id,
-            1, 1, Some(-10), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)))),
-        PreviewTeamScore(teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil)
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
+        ),
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default,
-      additive = true
-    )
-    val resultTeams = result.hcursor.downField("teams")
-      .as[List[Json]].getOrElse(Nil)
-    val topTenCount = resultTeams(0).hcursor
-      .downField("top_ten_count").as[Int].getOrElse(-1)
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default, additive = true)
+    val resultTeams = result.hcursor.downField("teams").as[List[Json]].getOrElse(Nil)
+    val topTenCount = resultTeams(0).hcursor.downField("top_ten_count").as[Int].getOrElse(-1)
 
     // 3+1 (golfer1 + live) + 1 (golfer3 kept) = 5
     assertEquals(topTenCount, 5)
@@ -732,124 +857,120 @@ class WeeklyReportServiceTest extends FunSuite:
 
   test("overlayPriorLivePreview adds to previous, not earnings") {
     // Base report: selected tournament has golfer1 earning $5
-    val rows = List(
-      baseRow(1, golfer1Id, "SCHEFFLER",
-        earnings = BigDecimal(5), topTens = 1,
-        seasonEarnings = BigDecimal(20), seasonTopTens = 2)
-    )
+    val rows = List(baseRow(
+      1,
+      golfer1Id,
+      "SCHEFFLER",
+      earnings = BigDecimal(5),
+      topTens = 1,
+      seasonEarnings = BigDecimal(20),
+      seasonTopTens = 2
+    ))
     val report = baseReport(List(
-      teamJson(teamAId, "Team A", "Alice", rows,
-        previous = BigDecimal(10), topTenCount = 2),
-      teamJson(teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY",
-          seasonEarnings = BigDecimal(15), seasonTopTens = 1)),
-        previous = BigDecimal(-10), topTenCount = 1)
+      teamJson(teamAId, "Team A", "Alice", rows, previous = BigDecimal(10), topTenCount = 2),
+      teamJson(
+        teamBId,
+        "Team B",
+        "Bob",
+        List(baseRow(1, golfer2Id, "MCILROY", seasonEarnings = BigDecimal(15), seasonTopTens = 1)),
+        previous = BigDecimal(-10),
+        topTenCount = 1
+      )
     ))
 
     // Prior tournament: Team A golfer1 earned $18
     val preview = EspnLivePreview(
-      espnName = "Prior Open", espnId = "999",
-      completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Prior Open",
+      espnId = "999",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice",
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore("Scottie Scheffler", golfer1Id,
-            1, 1, Some(-10), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)))),
-        PreviewTeamScore(teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil)
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
+        ),
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.overlayPriorLivePreview(
-      report, preview, SeasonRules.default
-    )
-    val resultTeams = result.hcursor.downField("teams")
-      .as[List[Json]].getOrElse(Nil)
+    val result = service.overlayPriorLivePreview(report, preview, SeasonRules.default)
+    val resultTeams = result.hcursor.downField("teams").as[List[Json]].getOrElse(Nil)
 
     // Earnings should be UNCHANGED (still $5 for selected tournament)
-    val earningsA = resultTeams(0).hcursor.downField("rows")
-      .downArray.downField("earnings")
-      .as[BigDecimal].getOrElse(BigDecimal(-1))
+    val earningsA = resultTeams(0).hcursor.downField("rows").downArray.downField("earnings").as[BigDecimal]
+      .getOrElse(BigDecimal(-1))
     assertEquals(earningsA, BigDecimal(5))
 
     // Previous should increase: $10 + $18 (zero-sum from prior)
     // Prior zero-sum: A=$18*2-$18=$18, B=$0*2-$18=-$18
-    val previousA = resultTeams(0).hcursor
-      .downField("previous")
-      .as[BigDecimal].getOrElse(BigDecimal(-999))
+    val previousA = resultTeams(0).hcursor.downField("previous").as[BigDecimal].getOrElse(BigDecimal(-999))
     assertEquals(previousA, BigDecimal(28))
 
-    val previousB = resultTeams(1).hcursor
-      .downField("previous")
-      .as[BigDecimal].getOrElse(BigDecimal(-999))
+    val previousB = resultTeams(1).hcursor.downField("previous").as[BigDecimal].getOrElse(BigDecimal(-999))
     assertEquals(previousB, BigDecimal(-28))
 
     // Season earnings updated for golfer1
-    val seA = resultTeams(0).hcursor.downField("rows")
-      .downArray.downField("season_earnings")
-      .as[BigDecimal].getOrElse(BigDecimal(-1))
+    val seA = resultTeams(0).hcursor.downField("rows").downArray.downField("season_earnings").as[BigDecimal]
+      .getOrElse(BigDecimal(-1))
     assertEquals(seA, BigDecimal(38))
 
     // Season top tens updated
-    val stA = resultTeams(0).hcursor.downField("rows")
-      .downArray.downField("season_top_tens")
-      .as[Int].getOrElse(-1)
+    val stA = resultTeams(0).hcursor.downField("rows").downArray.downField("season_top_tens").as[Int].getOrElse(-1)
     assertEquals(stA, 3)
 
     // Top ten count updated
-    val ttcA = resultTeams(0).hcursor
-      .downField("top_ten_count").as[Int].getOrElse(-1)
+    val ttcA = resultTeams(0).hcursor.downField("top_ten_count").as[Int].getOrElse(-1)
     assertEquals(ttcA, 3)
 
     // Report marked as live
-    assert(result.hcursor.downField("live")
-      .as[Boolean].getOrElse(false))
+    assert(result.hcursor.downField("live").as[Boolean].getOrElse(false))
   }
 
   test("overlayPriorLivePreview maintains zero-sum in previous") {
     val report = baseReport(List(
-      teamJson(teamAId, "Team A", "Alice",
-        List(baseRow(1, golfer1Id, "SCHEFFLER")),
-        previous = BigDecimal(0)),
-      teamJson(teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY")),
-        previous = BigDecimal(0))
+      teamJson(teamAId, "Team A", "Alice", List(baseRow(1, golfer1Id, "SCHEFFLER")), previous = BigDecimal(0)),
+      teamJson(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")), previous = BigDecimal(0))
     ))
 
     val preview = EspnLivePreview(
-      espnName = "Prior Open", espnId = "999",
-      completed = false, payoutMultiplier = BigDecimal(1),
+      espnName = "Prior Open",
+      espnId = "999",
+      completed = false,
+      payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(teamAId, "Team A", "Alice",
+        PreviewTeamScore(
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(12),
-          List(golferScore("Scottie Scheffler", golfer1Id,
-            2, 1, Some(-8), BigDecimal(12),
-            BigDecimal(100), BigDecimal(12)))),
-        PreviewTeamScore(teamBId, "Team B", "Bob",
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 2, 1, Some(-8), BigDecimal(12), BigDecimal(100), BigDecimal(12))
+          )
+        ),
+        PreviewTeamScore(
+          teamBId,
+          "Team B",
+          "Bob",
           BigDecimal(10),
-          List(golferScore("Rory McIlroy", golfer2Id,
-            3, 1, Some(-6), BigDecimal(10),
-            BigDecimal(100), BigDecimal(10))))
+          List(golferScore("Rory McIlroy", golfer2Id, 3, 1, Some(-6), BigDecimal(10), BigDecimal(100), BigDecimal(10)))
+        )
       ),
       leaderboard = Nil
     )
 
-    val result = service.overlayPriorLivePreview(
-      report, preview, SeasonRules.default
-    )
-    val resultTeams = result.hcursor.downField("teams")
-      .as[List[Json]].getOrElse(Nil)
+    val result = service.overlayPriorLivePreview(report, preview, SeasonRules.default)
+    val resultTeams = result.hcursor.downField("teams").as[List[Json]].getOrElse(Nil)
 
-    val prevA = resultTeams(0).hcursor
-      .downField("previous")
-      .as[BigDecimal].getOrElse(BigDecimal(-999))
-    val prevB = resultTeams(1).hcursor
-      .downField("previous")
-      .as[BigDecimal].getOrElse(BigDecimal(-999))
+    val prevA = resultTeams(0).hcursor.downField("previous").as[BigDecimal].getOrElse(BigDecimal(-999))
+    val prevB = resultTeams(1).hcursor.downField("previous").as[BigDecimal].getOrElse(BigDecimal(-999))
 
     // A: $12*2-$22=$2, B: $10*2-$22=-$2
     assertEquals(prevA, BigDecimal(2))
@@ -861,25 +982,20 @@ class WeeklyReportServiceTest extends FunSuite:
 
   private val seasonId = UUID.randomUUID()
 
-  private def mkTournament(
-      name: String,
-      startDate: String,
-      status: String = "completed"
-  ): Tournament =
-    Tournament(
-      id = UUID.randomUUID(),
-      pgaTournamentId = None,
-      name = name,
-      seasonId = seasonId,
-      startDate = LocalDate.parse(startDate),
-      endDate = LocalDate.parse(startDate).plusDays(3),
-      courseName = None,
-      status = status,
-      purseAmount = None,
-      payoutMultiplier = BigDecimal(1),
-      metadata = Json.obj(),
-      createdAt = Instant.now()
-    )
+  private def mkTournament(name: String, startDate: String, status: String = "completed"): Tournament = Tournament(
+    id = UUID.randomUUID(),
+    pgaTournamentId = None,
+    name = name,
+    seasonId = seasonId,
+    startDate = LocalDate.parse(startDate),
+    endDate = LocalDate.parse(startDate).plusDays(3),
+    courseName = None,
+    status = status,
+    purseAmount = None,
+    payoutMultiplier = BigDecimal(1),
+    metadata = Json.obj(),
+    createdAt = Instant.now()
+  )
 
   test("tBefore orders same-date tournaments by name") {
     val week8a = mkTournament("Week 8A", "2026-03-05")

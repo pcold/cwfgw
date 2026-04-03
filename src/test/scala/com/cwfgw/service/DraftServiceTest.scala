@@ -8,8 +8,7 @@ class DraftServiceTest extends FunSuite:
   private val service = new DraftService(null)
   private val draftId = UUID.fromString("00000000-0000-0000-0000-000000000099")
 
-  private def teamId(n: Int): UUID =
-    UUID.fromString(s"00000000-0000-0000-0000-00000000000$n")
+  private def teamId(n: Int): UUID = UUID.fromString(s"00000000-0000-0000-0000-00000000000$n")
 
   private val team1 = teamId(1)
   private val team2 = teamId(2)

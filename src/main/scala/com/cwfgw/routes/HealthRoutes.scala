@@ -10,7 +10,4 @@ object HealthRoutes:
 
   val routes: HttpRoutes[IO] = HttpRoutes.of[IO]:
     case GET -> Root / "api" / "v1" / "health" =>
-      Ok(Json.obj(
-        "status" -> Json.fromString("ok"),
-        "service" -> Json.fromString("cwfgw")
-      ))
+      Ok(Json.obj("status" -> Json.fromString("ok"), "service" -> Json.fromString("cwfgw")))

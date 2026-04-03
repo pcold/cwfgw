@@ -9,11 +9,8 @@ import com.cwfgw.repository.LeagueRepository
 
 class LeagueService(xa: Transactor[IO]):
 
-  def list: IO[List[League]] =
-    LeagueRepository.findAll.transact(xa)
+  def list: IO[List[League]] = LeagueRepository.findAll.transact(xa)
 
-  def get(id: UUID): IO[Option[League]] =
-    LeagueRepository.findById(id).transact(xa)
+  def get(id: UUID): IO[Option[League]] = LeagueRepository.findById(id).transact(xa)
 
-  def create(req: CreateLeague): IO[League] =
-    LeagueRepository.create(req).transact(xa)
+  def create(req: CreateLeague): IO[League] = LeagueRepository.create(req).transact(xa)

@@ -13,51 +13,49 @@ import com.cwfgw.service.{TeamService, RosterViewTeam}
 
 object TeamRoutes:
 
-  def routes(service: TeamService): HttpRoutes[IO] =
-    HttpRoutes.of[IO]:
-      case GET -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "rosters" =>
-        service.getRosterView(seasonId).flatMap: teams =>
-          Ok(Json.arr(teams.map: t =>
+  def routes(service: TeamService): HttpRoutes[IO] = HttpRoutes.of[IO]:
+    case GET -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "rosters" => service.getRosterView(seasonId)
+        .flatMap: teams =>
+          Ok(Json.arr(teams.map { t =>
             Json.obj(
               "team_id" -> t.teamId.asJson,
               "team_name" -> t.teamName.asJson,
-              "picks" -> t.picks.map: p =>
+              "picks" -> t.picks.map { p =>
                 Json.obj(
                   "round" -> p.round.asJson,
                   "golfer_name" -> p.golferName.asJson,
                   "golfer_id" -> p.golferId.asJson,
                   "ownership_pct" -> p.ownershipPct.asJson
                 )
-              .asJson
+              }.asJson
             )
-          *))
+          }*))
 
-      case GET -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "teams" =>
-        service.listBySeason(seasonId).flatMap(Ok(_))
+    case GET -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "teams" => service.listBySeason(seasonId)
+        .flatMap(Ok(_))
 
-      case GET -> Root / "api" / "v1" / "seasons" / UUIDVar(_) / "teams" / UUIDVar(teamId) =>
-        service.get(teamId).flatMap:
-          case Some(team) => Ok(team)
-          case None => NotFound()
+    case GET -> Root / "api" / "v1" / "seasons" / UUIDVar(_) / "teams" / UUIDVar(teamId) => service.get(teamId).flatMap:
+        case Some(team) => Ok(team)
+        case None => NotFound()
 
-      case req @ POST -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "teams" =>
-        req.as[CreateTeam].flatMap: body =>
-          service.create(seasonId, body).flatMap(Created(_))
+    case req @ POST -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "teams" => req.as[CreateTeam].flatMap:
+        body => service.create(seasonId, body).flatMap(Created(_))
 
-      case req @ PUT -> Root / "api" / "v1" / "seasons" / UUIDVar(_) / "teams" / UUIDVar(teamId) =>
-        req.as[UpdateTeam].flatMap: body =>
+    case req @ PUT -> Root / "api" / "v1" / "seasons" / UUIDVar(_) / "teams" / UUIDVar(teamId) => req.as[UpdateTeam]
+        .flatMap: body =>
           service.update(teamId, body).flatMap:
             case Some(team) => Ok(team)
             case None => NotFound()
 
-      case GET -> Root / "api" / "v1" / "seasons" / UUIDVar(_) / "teams" / UUIDVar(teamId) / "roster" =>
-        service.getRoster(teamId).flatMap(Ok(_))
+    case GET -> Root / "api" / "v1" / "seasons" / UUIDVar(_) / "teams" / UUIDVar(teamId) / "roster" => service
+        .getRoster(teamId).flatMap(Ok(_))
 
-      case req @ POST -> Root / "api" / "v1" / "seasons" / UUIDVar(_) / "teams" / UUIDVar(teamId) / "roster" =>
-        req.as[AddToRoster].flatMap: body =>
+    case req @ POST -> Root / "api" / "v1" / "seasons" / UUIDVar(_) / "teams" / UUIDVar(teamId) / "roster" => req
+        .as[AddToRoster].flatMap: body =>
           service.addToRoster(teamId, body).flatMap(Created(_))
 
-      case DELETE -> Root / "api" / "v1" / "seasons" / UUIDVar(_) / "teams" / UUIDVar(teamId) / "roster" / UUIDVar(golferId) =>
-        service.dropFromRoster(teamId, golferId).flatMap:
-          case true => NoContent()
-          case false => NotFound()
+    case DELETE ->
+        Root / "api" / "v1" / "seasons" / UUIDVar(_) / "teams" / UUIDVar(teamId) / "roster" / UUIDVar(golferId) =>
+      service.dropFromRoster(teamId, golferId).flatMap:
+        case true => NoContent()
+        case false => NotFound()

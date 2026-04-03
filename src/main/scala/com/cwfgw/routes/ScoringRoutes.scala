@@ -13,22 +13,20 @@ import com.cwfgw.service.ScoringService
 
 object ScoringRoutes:
 
-  def routes(service: ScoringService): HttpRoutes[IO] =
-    HttpRoutes.of[IO]:
-      case GET -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "scoring" / UUIDVar(tournamentId) =>
-        service.getScores(seasonId, tournamentId).flatMap(Ok(_))
+  def routes(service: ScoringService): HttpRoutes[IO] = HttpRoutes.of[IO]:
+    case GET -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "scoring" / UUIDVar(tournamentId) => service
+        .getScores(seasonId, tournamentId).flatMap(Ok(_))
 
-      case POST -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "scoring" / "calculate" / UUIDVar(tournamentId) =>
-        service.calculateScores(seasonId, tournamentId).flatMap:
+    case POST ->
+        Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "scoring" / "calculate" / UUIDVar(tournamentId) => service
+        .calculateScores(seasonId, tournamentId).flatMap:
           case Right(scores) => Ok(scores)
-          case Left(err) =>
-            BadRequest(Json.obj("error" -> err.asJson))
+          case Left(err) => BadRequest(Json.obj("error" -> err.asJson))
 
-      case POST -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "scoring" / "refresh-standings" =>
-        service.refreshStandings(seasonId).flatMap(Ok(_))
+    case POST -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "scoring" / "refresh-standings" => service
+        .refreshStandings(seasonId).flatMap(Ok(_))
 
-      case GET -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "scoring" / "side-bets" =>
-        service.getSideBetStandings(seasonId).flatMap:
+    case GET -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "scoring" / "side-bets" => service
+        .getSideBetStandings(seasonId).flatMap:
           case Right(data) => Ok(data)
-          case Left(err) =>
-            BadRequest(Json.obj("error" -> err.asJson))
+          case Left(err) => BadRequest(Json.obj("error" -> err.asJson))

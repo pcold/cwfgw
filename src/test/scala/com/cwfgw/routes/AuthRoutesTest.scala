@@ -20,20 +20,12 @@ class AuthRoutesTest extends FunSuite:
   private val validToken = "test-token-123"
   private val validUser = "admin"
 
-  private def mkAuthService(
-      loginResult: Option[String] = None
-  ): AuthService =
-    val sessions = Ref.unsafe[IO, Map[String, String]](
-      Map(validToken -> validUser)
-    )
+  private def mkAuthService(loginResult: Option[String] = None): AuthService =
+    val sessions = Ref.unsafe[IO, Map[String, String]](Map(validToken -> validUser))
     new AuthService(null, sessions):
-      override def login(
-          username: String,
-          password: String
-      ): IO[Option[String]] = IO.pure(loginResult)
+      override def login(username: String, password: String): IO[Option[String]] = IO.pure(loginResult)
 
-  private def sessionCookie(token: String): RequestCookie =
-    RequestCookie("cwfgw_session", token)
+  private def sessionCookie(token: String): RequestCookie = RequestCookie("cwfgw_session", token)
 
   // ================================================================
   // GET /api/v1/auth/me
@@ -45,40 +37,26 @@ class AuthRoutesTest extends FunSuite:
     val resp = routes.run(req).unsafeRunSync()
     assertEquals(resp.status, Status.Ok)
     val body = resp.as[Json].unsafeRunSync()
-    assertEquals(
-      body.hcursor.downField("authenticated").as[Boolean],
-      Right(false)
-    )
+    assertEquals(body.hcursor.downField("authenticated").as[Boolean], Right(false))
   }
 
   test("GET /auth/me with valid cookie returns authenticated: true") {
     val routes = AuthRoutes.routes(mkAuthService()).orNotFound
-    val req = Request[IO](Method.GET, uri"/api/v1/auth/me")
-      .addCookie(sessionCookie(validToken))
+    val req = Request[IO](Method.GET, uri"/api/v1/auth/me").addCookie(sessionCookie(validToken))
     val resp = routes.run(req).unsafeRunSync()
     assertEquals(resp.status, Status.Ok)
     val body = resp.as[Json].unsafeRunSync()
-    assertEquals(
-      body.hcursor.downField("authenticated").as[Boolean],
-      Right(true)
-    )
-    assertEquals(
-      body.hcursor.downField("username").as[String],
-      Right(validUser)
-    )
+    assertEquals(body.hcursor.downField("authenticated").as[Boolean], Right(true))
+    assertEquals(body.hcursor.downField("username").as[String], Right(validUser))
   }
 
   test("GET /auth/me with invalid cookie returns authenticated: false") {
     val routes = AuthRoutes.routes(mkAuthService()).orNotFound
-    val req = Request[IO](Method.GET, uri"/api/v1/auth/me")
-      .addCookie(sessionCookie("bogus-token"))
+    val req = Request[IO](Method.GET, uri"/api/v1/auth/me").addCookie(sessionCookie("bogus-token"))
     val resp = routes.run(req).unsafeRunSync()
     assertEquals(resp.status, Status.Ok)
     val body = resp.as[Json].unsafeRunSync()
-    assertEquals(
-      body.hcursor.downField("authenticated").as[Boolean],
-      Right(false)
-    )
+    assertEquals(body.hcursor.downField("authenticated").as[Boolean], Right(false))
   }
 
   // ================================================================
@@ -89,10 +67,7 @@ class AuthRoutesTest extends FunSuite:
     val token = "new-session-token"
     val routes = AuthRoutes.routes(mkAuthService(Some(token))).orNotFound
     val req = Request[IO](Method.POST, uri"/api/v1/auth/login")
-      .withEntity(Json.obj(
-        "username" -> "admin".asJson,
-        "password" -> "AlsTheBoss".asJson
-      ))
+      .withEntity(Json.obj("username" -> "admin".asJson, "password" -> "AlsTheBoss".asJson))
     val resp = routes.run(req).unsafeRunSync()
     assertEquals(resp.status, Status.Ok)
     val cookie = resp.cookies.find(_.name == "cwfgw_session")
@@ -103,10 +78,7 @@ class AuthRoutesTest extends FunSuite:
   test("POST /auth/login with bad creds returns 403") {
     val routes = AuthRoutes.routes(mkAuthService(None)).orNotFound
     val req = Request[IO](Method.POST, uri"/api/v1/auth/login")
-      .withEntity(Json.obj(
-        "username" -> "admin".asJson,
-        "password" -> "wrong".asJson
-      ))
+      .withEntity(Json.obj("username" -> "admin".asJson, "password" -> "wrong".asJson))
     val resp = routes.run(req).unsafeRunSync()
     assertEquals(resp.status, Status.Forbidden)
     val body = resp.as[Json].unsafeRunSync()
@@ -122,8 +94,7 @@ class AuthRoutesTest extends FunSuite:
     val routes = AuthRoutes.routes(authService).orNotFound
 
     // Logout with valid token
-    val req = Request[IO](Method.POST, uri"/api/v1/auth/logout")
-      .addCookie(sessionCookie(validToken))
+    val req = Request[IO](Method.POST, uri"/api/v1/auth/logout").addCookie(sessionCookie(validToken))
     val resp = routes.run(req).unsafeRunSync()
     assertEquals(resp.status, Status.Ok)
 

@@ -16,8 +16,7 @@ class AdminServiceTest extends FunSuite:
 
   // ---- Helper: build athlete list ----
 
-  private def athlete(id: String, name: String): EspnAthlete =
-    EspnAthlete(id, name)
+  private def athlete(id: String, name: String): EspnAthlete = EspnAthlete(id, name)
 
   private val sampleAthletes = List(
     athlete("1", "Scottie Scheffler"),
@@ -36,32 +35,22 @@ class AdminServiceTest extends FunSuite:
     athlete("14", "Bryson DeChambeau"),
     athlete("15", "Ludvig Åberg"),
     athlete("16", "Nicolai Højgaard"),
-    athlete("17", "Robert Macintyre"),  // note: lowercase 'i' in ESPN
+    athlete("17", "Robert Macintyre") // note: lowercase 'i' in ESPN
   )
 
   // ================================================================
   // editDistance
   // ================================================================
 
-  test("editDistance: identical strings = 0") {
-    assertEquals(admin.editDistance("SCHEFFLER", "SCHEFFLER"), 0)
-  }
+  test("editDistance: identical strings = 0") { assertEquals(admin.editDistance("SCHEFFLER", "SCHEFFLER"), 0) }
 
-  test("editDistance: single substitution = 1") {
-    assertEquals(admin.editDistance("RAHM", "RAHN"), 1)
-  }
+  test("editDistance: single substitution = 1") { assertEquals(admin.editDistance("RAHM", "RAHN"), 1) }
 
-  test("editDistance: single insertion = 1") {
-    assertEquals(admin.editDistance("RAHM", "RAAHM"), 1)
-  }
+  test("editDistance: single insertion = 1") { assertEquals(admin.editDistance("RAHM", "RAAHM"), 1) }
 
-  test("editDistance: single deletion = 1") {
-    assertEquals(admin.editDistance("RAHM", "RAM"), 1)
-  }
+  test("editDistance: single deletion = 1") { assertEquals(admin.editDistance("RAHM", "RAM"), 1) }
 
-  test("editDistance: completely different strings") {
-    assertEquals(admin.editDistance("ABC", "XYZ"), 3)
-  }
+  test("editDistance: completely different strings") { assertEquals(admin.editDistance("ABC", "XYZ"), 3) }
 
   test("editDistance: empty strings") {
     assertEquals(admin.editDistance("", ""), 0)
@@ -77,25 +66,15 @@ class AdminServiceTest extends FunSuite:
     assertEquals(admin.stripDiacritics("Scottie Scheffler"), "Scottie Scheffler")
   }
 
-  test("stripDiacritics: removes accents") {
-    assertEquals(admin.stripDiacritics("Åberg"), "Aberg")
-  }
+  test("stripDiacritics: removes accents") { assertEquals(admin.stripDiacritics("Åberg"), "Aberg") }
 
-  test("stripDiacritics: handles ø → o") {
-    assertEquals(admin.stripDiacritics("Højgaard"), "Hojgaard")
-  }
+  test("stripDiacritics: handles ø → o") { assertEquals(admin.stripDiacritics("Højgaard"), "Hojgaard") }
 
-  test("stripDiacritics: handles đ → d") {
-    assertEquals(admin.stripDiacritics("Đoković"), "Dokovic")
-  }
+  test("stripDiacritics: handles đ → d") { assertEquals(admin.stripDiacritics("Đoković"), "Dokovic") }
 
-  test("stripDiacritics: handles ł → l") {
-    assertEquals(admin.stripDiacritics("Łukasz"), "Lukasz")
-  }
+  test("stripDiacritics: handles ł → l") { assertEquals(admin.stripDiacritics("Łukasz"), "Lukasz") }
 
-  test("stripDiacritics: handles ñ") {
-    assertEquals(admin.stripDiacritics("Muñoz"), "Munoz")
-  }
+  test("stripDiacritics: handles ñ") { assertEquals(admin.stripDiacritics("Muñoz"), "Munoz") }
 
   // ================================================================
   // firstNameMatches
@@ -159,8 +138,7 @@ class AdminServiceTest extends FunSuite:
   test("matchEspnPlayer: KH LEE returns Ambiguous (K.H. is single token, can't narrow)") {
     // K.H. Lee's first name is a single token "K.H.", so multi-initial "KH" doesn't narrow
     admin.matchEspnPlayer("KH LEE", sampleAthletes) match
-      case admin.MatchResult.Ambiguous(candidates) =>
-        assert(candidates.exists(_.name.contains("Lee")))
+      case admin.MatchResult.Ambiguous(candidates) => assert(candidates.exists(_.name.contains("Lee")))
       case other => fail(s"Expected Ambiguous, got $other")
   }
 
@@ -248,7 +226,7 @@ class AdminServiceTest extends FunSuite:
     EspnCalendarEntry("402", "PGA Championship", "2026-05-14"),
     EspnCalendarEntry("403", "Arnold Palmer Invitational presented by Mastercard", "2026-03-05"),
     EspnCalendarEntry("404", "Sony Open in Hawaii", "2026-01-15"),
-    EspnCalendarEntry("405", "AT&T Pebble Beach Pro-Am", "2026-02-12"),
+    EspnCalendarEntry("405", "AT&T Pebble Beach Pro-Am", "2026-02-12")
   )
 
   test("findEspnMatch: exact name match") {

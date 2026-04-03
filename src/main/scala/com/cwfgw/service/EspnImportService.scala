@@ -33,58 +33,54 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
   def importByDate(date: LocalDate): IO[List[EspnImportResult]] =
     for
       json <- espnClient.fetchScoreboard(date)
-      tournaments <- IO.fromEither(
-        espnClient.parseAllLeaderboards(json).left.map(e => new RuntimeException(e))
-      )
+      tournaments <- IO.fromEither(espnClient.parseAllLeaderboards(json).left.map(e => new RuntimeException(e)))
       _ <- logger.info(s"ESPN: ${tournaments.size} event(s) found for $date")
       completed = tournaments.filter(_.completed)
-      _ <- IO.raiseWhen(completed.isEmpty && tournaments.nonEmpty)(
-        new RuntimeException(s"No completed events for $date. ${tournaments.map(t => s"'${t.name}' is in progress").mkString(", ")}. Use GET /espn/preview to see live scores.")
-      )
+      _ <- IO.raiseWhen(completed.isEmpty && tournaments.nonEmpty)(new RuntimeException(
+        s"No completed events for $date. ${tournaments.map(t => s"'${t.name}' is in progress")
+            .mkString(", ")}. Use GET /espn/preview to see live scores."
+      ))
       results <- completed.traverse: parsed =>
         logger.info(s"ESPN: importing ${parsed.name} (${parsed.espnId}), ${parsed.competitors.size} competitors") >>
           importTournament(parsed)
     yield results
 
-  /** Import results for a specific tournament ID in our DB.
-    * Only imports the single ESPN event matching this tournament's pga_tournament_id. */
-  def importForTournament(tournamentId: UUID): IO[Either[String, List[EspnImportResult]]] =
-    TournamentRepository.findById(tournamentId).transact(xa).flatMap:
+  /** Import results for a specific tournament ID in our DB. Only imports the single ESPN event matching this
+    * tournament's pga_tournament_id.
+    */
+  def importForTournament(tournamentId: UUID): IO[Either[String, List[EspnImportResult]]] = TournamentRepository
+    .findById(tournamentId).transact(xa).flatMap:
       case None => IO.pure(Left("Tournament not found"))
-      case Some(tournament) =>
-        tournament.pgaTournamentId match
-          case Some(espnId) =>
-            importSingleEvent(tournament.startDate, espnId).map(r => Right(List(r)))
+      case Some(tournament) => tournament.pgaTournamentId match
+          case Some(espnId) => importSingleEvent(tournament.startDate, espnId).map(r => Right(List(r)))
           case None =>
             // No ESPN ID linked — fall back to importing all events for the date
             importByDate(tournament.startDate).map(Right(_))
 
-  /** Import results for a single ESPN event by its ESPN ID.
-    * Fetches the scoreboard for the date, filters to the matching event, and imports only that one. */
+  /** Import results for a single ESPN event by its ESPN ID. Fetches the scoreboard for the date, filters to the
+    * matching event, and imports only that one.
+    */
   def importSingleEvent(date: LocalDate, espnEventId: String): IO[EspnImportResult] =
     for
       json <- espnClient.fetchScoreboard(date)
-      tournaments <- IO.fromEither(
-        espnClient.parseAllLeaderboards(json).left.map(e => new RuntimeException(e))
-      )
-      target <- IO.fromOption(tournaments.find(_.espnId == espnEventId))(
-        new RuntimeException(s"ESPN event $espnEventId not found on scoreboard for $date")
-      )
-      _ <- IO.raiseUnless(target.completed)(
-        new RuntimeException(s"ESPN event '${target.name}' ($espnEventId) is not yet completed")
-      )
-      _ <- logger.info(s"ESPN: importing single event ${target.name} ($espnEventId), ${target.competitors.size} competitors")
+      tournaments <- IO.fromEither(espnClient.parseAllLeaderboards(json).left.map(e => new RuntimeException(e)))
+      target <- IO.fromOption(tournaments.find(_.espnId == espnEventId))(new RuntimeException(
+        s"ESPN event $espnEventId not found on scoreboard for $date"
+      ))
+      _ <- IO.raiseUnless(target.completed)(new RuntimeException(s"ESPN event '${target
+          .name}' ($espnEventId) is not yet completed"))
+      _ <- logger
+        .info(s"ESPN: importing single event ${target.name} ($espnEventId), ${target.competitors.size} competitors")
       result <- importTournament(target)
     yield result
 
-  /** Preview live fantasy scoring from current ESPN leaderboard, without writing to DB.
-    * Shows per-team earnings based on which rostered golfers are in the top 10. */
+  /** Preview live fantasy scoring from current ESPN leaderboard, without writing to DB. Shows per-team earnings based
+    * on which rostered golfers are in the top 10.
+    */
   def previewByDate(seasonId: UUID, date: LocalDate): IO[List[EspnLivePreview]] =
     for
       json <- espnClient.fetchScoreboard(date)
-      tournaments <- IO.fromEither(
-        espnClient.parseAllLeaderboards(json).left.map(e => new RuntimeException(e))
-      )
+      tournaments <- IO.fromEither(espnClient.parseAllLeaderboards(json).left.map(e => new RuntimeException(e)))
       dbState <- (for
         seasonOpt <- SeasonRepository.findById(seasonId)
         allGolfers <- GolferRepository.findAll(activeOnly = false, search = None)
@@ -93,42 +89,35 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
         tournamentRecords <- tournaments.traverse { espn =>
           sql"""SELECT id, payout_multiplier
                 FROM tournaments
-                WHERE pga_tournament_id = ${espn.espnId}"""
-            .query[(UUID, BigDecimal)].option
+                WHERE pga_tournament_id = ${espn.espnId}""".query[(UUID, BigDecimal)].option
         }
       yield (seasonOpt, allGolfers, teams, rosters, tournamentRecords)).transact(xa)
       (seasonOpt, allGolfers, teams, rosters, tournamentRecords) = dbState
-      rules = seasonOpt.map(_.seasonRules)
-        .getOrElse(SeasonRules.default)
+      rules = seasonOpt.map(_.seasonRules).getOrElse(SeasonRules.default)
       golferByEspnId = allGolfers.flatMap(g => g.pgaPlayerId.map(_ -> g)).toMap
       golferByName = allGolfers.map(g => (g.firstName.toLowerCase, g.lastName.toLowerCase) -> g).toMap
       golferByLastName = allGolfers.groupBy(_.lastName.toLowerCase)
       rostersByTeam = rosters.groupBy(_.teamId)
-      golferOwners = rosters.groupBy(_.golferId)
-        .view.mapValues(_.map(e =>
-          (e.teamId, e.ownershipPct))).toMap
+      golferOwners = rosters.groupBy(_.golferId).view.mapValues(_.map(e => (e.teamId, e.ownershipPct))).toMap
       numPlaces = rules.payouts.size
       previews = tournaments.zip(tournamentRecords).map { (espn, tournamentRecord) =>
-        val multiplier = tournamentRecord
-          .map(_._2).getOrElse(BigDecimal(1))
+        val multiplier = tournamentRecord.map(_._2).getOrElse(BigDecimal(1))
 
         // Match ESPN competitors to our golfers
         val matchedCompetitors: List[(EspnCompetitor, Option[Golfer])] = espn.competitors.map { c =>
           val golfer = golferByEspnId.get(c.espnId).orElse {
             val parts = c.name.split("\\s+", 2)
             val (first, last) = if parts.length >= 2 then (parts(0), parts(1)) else ("", parts(0))
-            golferByName.get((first.toLowerCase, last.toLowerCase)).orElse(
-              golferByLastName.get(last.toLowerCase).flatMap {
+            golferByName.get((first.toLowerCase, last.toLowerCase))
+              .orElse(golferByLastName.get(last.toLowerCase).flatMap {
                 case g :: Nil => Some(g)
                 case _ => None
-              }
-            )
+              })
           }
           (c, golfer)
         }
 
-        val tiedCounts: Map[Int, Int] = espn.competitors
-          .groupBy(_.position).view.mapValues(_.size).toMap
+        val tiedCounts: Map[Int, Int] = espn.competitors.groupBy(_.position).view.mapValues(_.size).toMap
 
         val teamPreviews = teams.map { team =>
           val roster = rostersByTeam.getOrElse(team.id, Nil)
@@ -136,8 +125,7 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
           val golferEarnings = matchedCompetitors.flatMap { (competitor, golferOpt) =>
             for
               golfer <- golferOpt
-              entry <- rosteredGolferIds.get(golfer.id)
-              if competitor.position <= numPlaces
+              entry <- rosteredGolferIds.get(golfer.id) if competitor.position <= numPlaces
             yield
               val numTied = tiedCounts.getOrElse(competitor.position, 1)
               val basePayout = PayoutTable.tieSplitPayout(competitor.position, numTied, multiplier, rules)
@@ -167,9 +155,7 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
 
         val numTeams = teams.size
         val totalPot = teamPreviews.map(_.topTenEarnings).sum
-        val teamsWithWeekly = teamPreviews.map { tp =>
-          tp.copy(weeklyTotal = tp.topTenEarnings * numTeams - totalPot)
-        }
+        val teamsWithWeekly = teamPreviews.map { tp => tp.copy(weeklyTotal = tp.topTenEarnings * numTeams - totalPot) }
 
         EspnLivePreview(
           espnName = espn.name,
@@ -185,7 +171,8 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
               scoreToPar = c.scoreToPar,
               thru = if c.roundScores.nonEmpty then Some(s"${c.roundScores.size} rounds") else None,
               rostered = gOpt.exists(g => rosters.exists(_.golferId == g.id)),
-              teamName = gOpt.flatMap(g => rosters.find(_.golferId == g.id).flatMap(r => teams.find(_.id == r.teamId).map(_.teamName)))
+              teamName = gOpt
+                .flatMap(g => rosters.find(_.golferId == g.id).flatMap(r => teams.find(_.id == r.teamId).map(_.teamName)))
             )
           }
         )
@@ -193,138 +180,110 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
     yield previews
 
   /** Fetch the ESPN season calendar. */
-  def fetchCalendar: IO[List[EspnCalendarEntry]] =
-    espnClient.fetchCalendar
+  def fetchCalendar: IO[List[EspnCalendarEntry]] = espnClient.fetchCalendar
 
   /** Import results by ESPN event ID, matching to our tournament by pga_tournament_id. */
   def importByEspnId(espnEventId: String, date: LocalDate): IO[EspnImportResult] =
     for
       json <- espnClient.fetchScoreboard(date)
-      parsed <- IO.fromEither(
-        espnClient.parseLeaderboard(json).left.map(e => new RuntimeException(e))
-      )
+      parsed <- IO.fromEither(espnClient.parseLeaderboard(json).left.map(e => new RuntimeException(e)))
       result <- importTournament(parsed)
     yield result
 
   private def importTournament(espn: EspnTournament): IO[EspnImportResult] =
-    val action = for
-      // Find our tournament by ESPN ID (stored in pga_tournament_id)
-      tournamentOpt <- sql"SELECT id FROM tournaments WHERE pga_tournament_id = ${espn.espnId}"
-        .query[UUID].option
-      tournamentId <- tournamentOpt match
-        case Some(id) => FC.pure(id)
-        case None =>
-          // Try to find by name similarity (fallback)
-          sql"SELECT id FROM tournaments WHERE pga_tournament_id IS NULL ORDER BY start_date ASC LIMIT 1"
-            .query[UUID].option.flatMap:
-              case Some(id) =>
-                // Link this tournament to the ESPN event
-                sql"UPDATE tournaments SET pga_tournament_id = ${espn.espnId} WHERE id = $id".update.run.as(id)
-              case None =>
-                FC.raiseError[UUID](new RuntimeException(
-                  s"No tournament found for ESPN event '${espn.name}' (${espn.espnId}). Create the tournament first."))
+    val action =
+      for
+        // Find our tournament by ESPN ID (stored in pga_tournament_id)
+        tournamentOpt <- sql"SELECT id FROM tournaments WHERE pga_tournament_id = ${espn.espnId}".query[UUID].option
+        tournamentId <- tournamentOpt match
+          case Some(id) => FC.pure(id)
+          case None =>
+            // Try to find by name similarity (fallback)
+            sql"SELECT id FROM tournaments WHERE pga_tournament_id IS NULL ORDER BY start_date ASC LIMIT 1".query[UUID]
+              .option.flatMap:
+                case Some(id) =>
+                  // Link this tournament to the ESPN event
+                  sql"UPDATE tournaments SET pga_tournament_id = ${espn.espnId} WHERE id = $id".update.run.as(id)
+                case None => FC.raiseError[UUID](new RuntimeException(s"No tournament found for ESPN event '${espn
+                      .name}' (${espn.espnId}). Create the tournament first."))
 
-      // Update tournament status if completed
-      _ <- if espn.completed
-           then sql"UPDATE tournaments SET status = 'completed' WHERE id = $tournamentId".update.run
-           else FC.pure(0)
+        // Update tournament status if completed
+        _ <-
+          if espn.completed then sql"UPDATE tournaments SET status = 'completed' WHERE id = $tournamentId".update.run
+          else FC.pure(0)
 
-      // Load all golfers for name matching
-      allGolfers <- GolferRepository.findAll(activeOnly = false, search = None)
+        // Load all golfers for name matching
+        allGolfers <- GolferRepository.findAll(activeOnly = false, search = None)
 
-      // Process each competitor, tracking golfer ID collisions
-      results <- espn.competitors.foldLeft(
-        FC.pure(List.empty[(ImportedPlayer, Option[UUID])])
-      ) { (accIO, competitor) =>
-        accIO.flatMap { acc =>
-          matchGolfer(competitor, allGolfers).flatMap {
-            case None =>
-              val player = ImportedPlayer(
-                competitor.name, competitor.position,
-                matched = false, created = false
-              )
-              FC.pure(acc :+ (player, None))
-            case Some((golferId, created)) =>
-              val roundScoresJson = Json.arr(
-                competitor.roundScores.map(s => Json.fromInt(s))*
-              )
-              TournamentRepository.upsertResult(
-                tournamentId,
-                CreateTournamentResult(
-                  golferId = golferId,
-                  position = Some(competitor.position),
-                  scoreToPar = competitor.scoreToPar,
-                  totalStrokes = competitor.totalStrokes,
-                  earnings = None,
-                  roundScores = Some(roundScoresJson),
-                  madeCut = competitor.madeCut
-                )
-              ).map { _ =>
-                val player = ImportedPlayer(
-                  competitor.name, competitor.position,
-                  matched = true, created = created
-                )
-                acc :+ (player, Some(golferId))
+        // Process each competitor, tracking golfer ID collisions
+        results <- espn.competitors.foldLeft(FC.pure(List.empty[(ImportedPlayer, Option[UUID])])) {
+          (accIO, competitor) =>
+            accIO.flatMap { acc =>
+              matchGolfer(competitor, allGolfers).flatMap {
+                case None =>
+                  val player = ImportedPlayer(competitor.name, competitor.position, matched = false, created = false)
+                  FC.pure(acc :+ (player, None))
+                case Some((golferId, created)) =>
+                  val roundScoresJson = Json.arr(competitor.roundScores.map(s => Json.fromInt(s))*)
+                  TournamentRepository.upsertResult(
+                    tournamentId,
+                    CreateTournamentResult(
+                      golferId = golferId,
+                      position = Some(competitor.position),
+                      scoreToPar = competitor.scoreToPar,
+                      totalStrokes = competitor.totalStrokes,
+                      earnings = None,
+                      roundScores = Some(roundScoresJson),
+                      madeCut = competitor.madeCut
+                    )
+                  ).map { _ =>
+                    val player = ImportedPlayer(competitor.name, competitor.position, matched = true, created = created)
+                    acc :+ (player, Some(golferId))
+                  }
               }
-          }
+            }
         }
-      }
-      playerResults = results.map(_._1)
-      // Detect golfer ID collisions (two ESPN competitors → same DB golfer)
-      collisions = results
-        .collect { case (p, Some(gid)) => (gid, p.name, p.position) }
-        .groupBy(_._1)
-        .filter(_._2.size > 1)
-        .values.toList
-        .map(_.map(t => s"${t._2} (pos ${t._3})").mkString(" & "))
-    yield EspnImportResult(
-      tournamentId = tournamentId,
-      espnName = espn.name,
-      espnId = espn.espnId,
-      completed = espn.completed,
-      totalCompetitors = espn.competitors.size,
-      matched = playerResults.count(_.matched),
-      unmatched = playerResults.filterNot(_.matched).map(_.name),
-      created = playerResults.count(_.created),
-      collisions = collisions
-    )
-    action.transact(xa).flatTap { result =>
-      result.collisions.traverse_(c =>
-        logger.warn(s"COLLISION: golfer mapped to multiple ESPN competitors: $c")
+        playerResults = results.map(_._1)
+        // Detect golfer ID collisions (two ESPN competitors → same DB golfer)
+        collisions = results.collect { case (p, Some(gid)) => (gid, p.name, p.position) }.groupBy(_._1)
+          .filter(_._2.size > 1).values.toList.map(_.map(t => s"${t._2} (pos ${t._3})").mkString(" & "))
+      yield EspnImportResult(
+        tournamentId = tournamentId,
+        espnName = espn.name,
+        espnId = espn.espnId,
+        completed = espn.completed,
+        totalCompetitors = espn.competitors.size,
+        matched = playerResults.count(_.matched),
+        unmatched = playerResults.filterNot(_.matched).map(_.name),
+        created = playerResults.count(_.created),
+        collisions = collisions
       )
+    action.transact(xa).flatTap { result =>
+      result.collisions.traverse_(c => logger.warn(s"COLLISION: golfer mapped to multiple ESPN competitors: $c"))
     }
 
-  /** Try to match an ESPN competitor to a golfer in our DB.
-    * Strategy:
+  /** Try to match an ESPN competitor to a golfer in our DB. Strategy:
     *   1. Match by ESPN athlete ID (stored in pga_player_id) — check DB directly
     *   2. Match by exact full name (first + last)
     *   3. Match by last name only (if unique)
     *   4. Auto-create if not found
     */
-  private def matchGolfer(
-      competitor: EspnCompetitor,
-      allGolfers: List[Golfer]
-  ): ConnectionIO[Option[(UUID, Boolean)]] =
+  private def matchGolfer(competitor: EspnCompetitor, allGolfers: List[Golfer]): ConnectionIO[Option[(UUID, Boolean)]] =
     // 1. Check DB for existing ESPN ID mapping
-    sql"SELECT id FROM golfers WHERE pga_player_id = ${competitor.espnId}"
-      .query[UUID].option.flatMap:
-        case Some(id) => FC.pure(Some((id, false)))
-        case None =>
-          findGolferMatch(competitor.name, competitor.espnId, allGolfers) match
-            case GolferMatchResult.FullNameMatch(g) =>
-              sql"UPDATE golfers SET pga_player_id = ${competitor.espnId} WHERE id = ${g.id} AND pga_player_id IS NULL"
-                .update.run.as(Some((g.id, false)))
-            case GolferMatchResult.LastNameMatch(g) =>
-              sql"UPDATE golfers SET pga_player_id = ${competitor.espnId} WHERE id = ${g.id} AND pga_player_id IS NULL"
-                .update.run.as(Some((g.id, false)))
-            case GolferMatchResult.NoMatch(first, last) =>
-              GolferRepository.create(CreateGolfer(
-                pgaPlayerId = Some(competitor.espnId),
-                firstName = first,
-                lastName = last,
-                country = None,
-                worldRanking = None
-              )).map(g => Some((g.id, true)))
+    sql"SELECT id FROM golfers WHERE pga_player_id = ${competitor.espnId}".query[UUID].option.flatMap:
+      case Some(id) => FC.pure(Some((id, false)))
+      case None => findGolferMatch(competitor.name, competitor.espnId, allGolfers) match
+          case GolferMatchResult.FullNameMatch(g) => sql"UPDATE golfers SET pga_player_id = ${competitor
+                .espnId} WHERE id = ${g.id} AND pga_player_id IS NULL".update.run.as(Some((g.id, false)))
+          case GolferMatchResult.LastNameMatch(g) => sql"UPDATE golfers SET pga_player_id = ${competitor
+                .espnId} WHERE id = ${g.id} AND pga_player_id IS NULL".update.run.as(Some((g.id, false)))
+          case GolferMatchResult.NoMatch(first, last) => GolferRepository.create(CreateGolfer(
+              pgaPlayerId = Some(competitor.espnId),
+              firstName = first,
+              lastName = last,
+              country = None,
+              worldRanking = None
+            )).map(g => Some((g.id, true)))
 
 /** Pure golfer matching result — no DB side effects. */
 private[service] enum GolferMatchResult:
@@ -332,24 +291,23 @@ private[service] enum GolferMatchResult:
   case LastNameMatch(golfer: Golfer)
   case NoMatch(firstName: String, lastName: String)
 
-/** Pure: match a competitor name against a list of golfers.
-  * Strategy: exact full name → unique last name (only when first name
-  * is missing or abbreviated) → no match.
+/** Pure: match a competitor name against a list of golfers. Strategy: exact full name → unique last name (only when
+  * first name is missing or abbreviated) → no match.
   *
-  * Last-name-only matching is restricted to cases where the competitor
-  * has no usable first name (single-word name) or uses an abbreviation
-  * (1-2 chars like "J." or "JT"). Full first names that don't match
-  * the DB golfer fall through to auto-create, preventing cross-matching
-  * of different players who share a last name. */
+  * Last-name-only matching is restricted to cases where the competitor has no usable first name (single-word name) or
+  * uses an abbreviation (1-2 chars like "J." or "JT"). Full first names that don't match the DB golfer fall through to
+  * auto-create, preventing cross-matching of different players who share a last name.
+  */
 private[service] def findGolferMatch(
-    competitorName: String, espnId: String, allGolfers: List[Golfer]
+  competitorName: String,
+  espnId: String,
+  allGolfers: List[Golfer]
 ): GolferMatchResult =
   val nameParts = competitorName.split("\\s+", 2)
   val (first, last) = if nameParts.length >= 2 then (nameParts(0), nameParts(1)) else ("", nameParts(0))
 
   // 1. Exact full name match
-  val byFullName = allGolfers.find(g =>
-    g.firstName.equalsIgnoreCase(first) && g.lastName.equalsIgnoreCase(last))
+  val byFullName = allGolfers.find(g => g.firstName.equalsIgnoreCase(first) && g.lastName.equalsIgnoreCase(last))
   byFullName match
     case Some(g) => GolferMatchResult.FullNameMatch(g)
     case None =>
@@ -359,64 +317,58 @@ private[service] def findGolferMatch(
       val isAbbreviated = first.replaceAll("\\.", "").length <= 2
       val byLastName = allGolfers.filter(_.lastName.equalsIgnoreCase(last))
       byLastName match
-        case g :: Nil if first.isEmpty || isAbbreviated =>
-          GolferMatchResult.LastNameMatch(g)
+        case g :: Nil if first.isEmpty || isAbbreviated => GolferMatchResult.LastNameMatch(g)
         case _ => GolferMatchResult.NoMatch(first, last)
 
 case class EspnImportResult(
-    tournamentId: UUID,
-    espnName: String,
-    espnId: String,
-    completed: Boolean,
-    totalCompetitors: Int,
-    matched: Int,
-    unmatched: List[String],
-    created: Int,
-    collisions: List[String] = Nil
+  tournamentId: UUID,
+  espnName: String,
+  espnId: String,
+  completed: Boolean,
+  totalCompetitors: Int,
+  matched: Int,
+  unmatched: List[String],
+  created: Int,
+  collisions: List[String] = Nil
 )
 
-case class ImportedPlayer(
-    name: String,
-    position: Int,
-    matched: Boolean,
-    created: Boolean
-)
+case class ImportedPlayer(name: String, position: Int, matched: Boolean, created: Boolean)
 
 case class EspnLivePreview(
-    espnName: String,
-    espnId: String,
-    completed: Boolean,
-    payoutMultiplier: BigDecimal,
-    totalCompetitors: Int,
-    teams: List[PreviewTeamScore],
-    leaderboard: List[PreviewLeaderboardEntry]
+  espnName: String,
+  espnId: String,
+  completed: Boolean,
+  payoutMultiplier: BigDecimal,
+  totalCompetitors: Int,
+  teams: List[PreviewTeamScore],
+  leaderboard: List[PreviewLeaderboardEntry]
 )
 
 case class PreviewTeamScore(
-    teamId: UUID,
-    teamName: String,
-    ownerName: String,
-    topTenEarnings: BigDecimal,
-    golferScores: List[PreviewGolferScore],
-    weeklyTotal: BigDecimal = BigDecimal(0)
+  teamId: UUID,
+  teamName: String,
+  ownerName: String,
+  topTenEarnings: BigDecimal,
+  golferScores: List[PreviewGolferScore],
+  weeklyTotal: BigDecimal = BigDecimal(0)
 )
 
 case class PreviewGolferScore(
-    golferName: String,
-    golferId: UUID,
-    position: Int,
-    numTied: Int,
-    scoreToPar: Option[Int],
-    basePayout: BigDecimal,
-    ownershipPct: BigDecimal,
-    payout: BigDecimal
+  golferName: String,
+  golferId: UUID,
+  position: Int,
+  numTied: Int,
+  scoreToPar: Option[Int],
+  basePayout: BigDecimal,
+  ownershipPct: BigDecimal,
+  payout: BigDecimal
 )
 
 case class PreviewLeaderboardEntry(
-    name: String,
-    position: Int,
-    scoreToPar: Option[Int],
-    thru: Option[String],
-    rostered: Boolean,
-    teamName: Option[String]
+  name: String,
+  position: Int,
+  scoreToPar: Option[Int],
+  thru: Option[String],
+  rostered: Boolean,
+  teamName: Option[String]
 )

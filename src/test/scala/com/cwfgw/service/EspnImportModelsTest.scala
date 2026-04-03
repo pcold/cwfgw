@@ -4,10 +4,9 @@ import munit.FunSuite
 
 import java.util.UUID
 
-/**
- * Tests for the data model case classes defined in EspnImportService.
- * Verifies construction, defaults, and copy semantics for the preview models.
- */
+/** Tests for the data model case classes defined in EspnImportService. Verifies construction, defaults, and copy
+  * semantics for the preview models.
+  */
 class EspnImportModelsTest extends FunSuite:
 
   private val teamId = UUID.fromString("00000000-0000-0000-0000-000000000001")
@@ -113,9 +112,14 @@ class EspnImportModelsTest extends FunSuite:
   // ---- EspnLivePreview ----
 
   test("EspnLivePreview aggregates teams and leaderboard") {
-    val teamScore = PreviewTeamScore(teamId, "Team Alpha", "Alice", BigDecimal(18),
+    val teamScore = PreviewTeamScore(
+      teamId,
+      "Team Alpha",
+      "Alice",
+      BigDecimal(18),
       List(PreviewGolferScore("Scheffler", golferId, 1, 1, Some(-15), BigDecimal(18), BigDecimal(100), BigDecimal(18))),
-      weeklyTotal = BigDecimal(36))
+      weeklyTotal = BigDecimal(36)
+    )
     val lbEntry = PreviewLeaderboardEntry("Scheffler", 1, Some(-15), Some("4 rounds"), true, Some("Team Alpha"))
     val preview = EspnLivePreview(
       espnName = "The Players",
