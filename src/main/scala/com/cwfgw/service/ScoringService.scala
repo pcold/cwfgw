@@ -2,14 +2,14 @@ package com.cwfgw.service
 
 import cats.effect.IO
 import cats.implicits.*
+import com.cwfgw.domain.{*, given}
+import com.cwfgw.repository.{ScoreRepository, SeasonRepository, TeamRepository, TournamentRepository}
 import doobie.*
 import doobie.implicits.*
 import doobie.postgres.implicits.*
-import io.circe.Json
 import io.circe.syntax.*
+
 import java.util.UUID
-import com.cwfgw.domain.*
-import com.cwfgw.repository.{ScoreRepository, TeamRepository, TournamentRepository, SeasonRepository}
 
 class ScoringService(xa: Transactor[IO]):
 
@@ -22,7 +22,7 @@ class ScoringService(xa: Transactor[IO]):
   /** Calculate scores for a tournament. Each golfer's earnings are stored, then the zero-sum weekly totals can be
     * derived.
     */
-  def calculateScores(seasonId: UUID, tournamentId: UUID): IO[Either[String, Json]] =
+  def calculateScores(seasonId: UUID, tournamentId: UUID): IO[Either[String, WeeklyScoreResult]] =
     val action =
       for
         seasonOpt <- SeasonRepository.findById(seasonId)
@@ -46,64 +46,43 @@ class ScoringService(xa: Transactor[IO]):
                 roster <- TeamRepository.getRoster(team.id)
                 golferScores <- roster.traverse { entry =>
                   resultsByGolfer.get(entry.golferId) match
-                    case None => FC.pure(Option.empty[(UUID, BigDecimal, Json)])
+                    case None => FC.pure(Option.empty[GolferScoreEntry])
                     case Some(result) => result.position match
-                        case None => FC.pure(Option.empty[(UUID, BigDecimal, Json)])
-                        case Some(pos) if pos > rules.payouts.size => FC.pure(Option.empty[(UUID, BigDecimal, Json)])
+                        case None => FC.pure(Option.empty[GolferScoreEntry])
+                        case Some(pos) if pos > rules.payouts.size => FC.pure(Option.empty[GolferScoreEntry])
                         case Some(pos) =>
                           val numTied = results.count(_.position == result.position)
                           val basePayout = tieSplitPayout(pos, numTied, multiplier, rules)
                           val owners = golferOwners.getOrElse(entry.golferId, Nil)
                           val splits = PayoutTable.splitOwnership(basePayout, owners)
                           val ownerPayout = splits.getOrElse(team.id, basePayout)
-                          val breakdown = Json.obj(
-                            "position" -> pos.asJson,
-                            "num_tied" -> numTied.asJson,
-                            "base_payout" -> basePayout.asJson,
-                            "ownership_pct" -> entry.ownershipPct.asJson,
-                            "payout" -> ownerPayout.asJson,
-                            "multiplier" -> multiplier.asJson
-                          )
+                          val bd = ScoreBreakdown(pos, numTied, basePayout, entry.ownershipPct, ownerPayout, multiplier)
                           ScoreRepository
-                            .upsertScore(seasonId, team.id, tournamentId, entry.golferId, ownerPayout, breakdown)
-                            .map(s => Some((entry.golferId, ownerPayout, breakdown)))
+                            .upsertScore(seasonId, team.id, tournamentId, entry.golferId, ownerPayout, bd.asJson)
+                            .map(_ => Some(GolferScoreEntry(entry.golferId, ownerPayout, bd)))
                 }
               yield (team, golferScores.flatten, roster)
             }
 
             teamEarnings.map { teamsData =>
               val teamTotals = teamsData.map { (team, scores, _) =>
-                val topTens = scores.map(_._2).sum
+                val topTens = scores.map(_.payout).sum
                 (team, topTens, scores)
               }
               val totalPot = teamTotals.map(_._2).sum
 
               val weeklyResults = teamTotals.map { (team, topTens, scores) =>
                 val weeklyTotal = topTens * numTeams - totalPot
-                Json.obj(
-                  "team_id" -> team.id.asJson,
-                  "team_name" -> team.teamName.asJson,
-                  "top_tens" -> topTens.asJson,
-                  "weekly_total" -> weeklyTotal.asJson,
-                  "golfer_scores" -> scores.map { (gid, payout, bd) =>
-                    Json.obj("golfer_id" -> gid.asJson, "payout" -> payout.asJson, "breakdown" -> bd)
-                  }.asJson
-                )
+                TeamWeeklyResult(team.id, team.teamName, topTens, weeklyTotal, scores)
               }
 
-              Right(Json.obj(
-                "tournament_id" -> tournamentId.asJson,
-                "multiplier" -> multiplier.asJson,
-                "num_teams" -> numTeams.asJson,
-                "total_pot" -> totalPot.asJson,
-                "teams" -> weeklyResults.asJson
-              ))
+              Right(WeeklyScoreResult(tournamentId, multiplier, numTeams, totalPot, weeklyResults))
             }
       yield outcome
     action.transact(xa)
 
   /** Get season-long side bet standings. */
-  def getSideBetStandings(seasonId: UUID): IO[Either[String, Json]] =
+  def getSideBetStandings(seasonId: UUID): IO[Either[String, SideBetStandings]] =
     val action =
       for
         seasonOpt <- SeasonRepository.findById(seasonId)
@@ -131,45 +110,24 @@ class ScoringService(xa: Transactor[IO]):
                     val sorted = entries.sortBy(-_._3)
                     val winner = sorted.headOption.filter(_._3 > BigDecimal(0))
                     val active = winner.isDefined
-                    Json.obj(
-                      "round" -> round.asJson,
-                      "active" -> active.asJson,
-                      "winner" -> winner.map { (tid, gid, total) =>
-                        Json.obj(
-                          "team_id" -> tid.asJson,
-                          "team_name" -> teamMap.getOrElse(tid, "").asJson,
-                          "golfer_id" -> gid.asJson,
-                          "cumulative_earnings" -> total.asJson,
-                          "net_winnings" -> (rules.sideBetAmount * (numTeams - 1)).asJson
-                        )
-                      }.asJson,
-                      "entries" -> sorted.map { (tid, gid, total) =>
-                        Json.obj(
-                          "team_id" -> tid.asJson,
-                          "team_name" -> teamMap.getOrElse(tid, "").asJson,
-                          "golfer_id" -> gid.asJson,
-                          "cumulative_earnings" -> total.asJson
-                        )
-                      }.asJson
-                    )
+                    val winnerResult = winner.map { (tid, gid, total) =>
+                      SideBetWinner(tid, teamMap.getOrElse(tid, ""), gid, total, rules.sideBetAmount * (numTeams - 1))
+                    }
+                    val entryList = sorted.map { (tid, gid, total) =>
+                      SideBetEntry(tid, teamMap.getOrElse(tid, ""), gid, total)
+                    }
+                    SideBetRound(round, active, winnerResult, entryList)
                   }
                 }.map { rounds =>
-                  val winners = rounds.flatMap { r =>
-                    r.hcursor.downField("winner").focus.flatMap(_.hcursor.downField("team_id").as[UUID].toOption)
-                  }
+                  val winners = rounds.flatMap(_.winner.map(_.teamId))
                   val teamSideBetPnl = teams.map { team =>
                     val wins = winners.count(_ == team.id)
-                    val activeBets = rounds.count(_.hcursor.downField("active").as[Boolean].getOrElse(false))
+                    val activeBets = rounds.count(_.active)
                     val losses = activeBets - wins
                     val net = (rules.sideBetAmount * (numTeams - 1) * wins) - (rules.sideBetAmount * losses)
-                    Json.obj(
-                      "team_id" -> team.id.asJson,
-                      "team_name" -> team.teamName.asJson,
-                      "wins" -> wins.asJson,
-                      "net" -> net.asJson
-                    )
+                    SideBetTeamTotal(team.id, team.teamName, wins, net)
                   }
-                  Right(Json.obj("rounds" -> rounds.asJson, "team_totals" -> teamSideBetPnl.asJson))
+                  Right(SideBetStandings(rounds, teamSideBetPnl))
                 }
       yield result
     action.transact(xa)
@@ -189,7 +147,7 @@ class ScoringService(xa: Transactor[IO]):
     rules: SeasonRules,
     owners: List[(UUID, BigDecimal)] = Nil,
     teamId: Option[UUID] = None
-  ): Option[(BigDecimal, BigDecimal, Json)] = position match
+  ): Option[(BigDecimal, BigDecimal, ScoreBreakdown)] = position match
     case None => None
     case Some(pos) if pos > rules.payouts.size => None
     case Some(pos) =>
@@ -199,14 +157,7 @@ class ScoringService(xa: Transactor[IO]):
         if owners.size > 1 && teamId.isDefined then
           PayoutTable.splitOwnership(basePayout, owners).getOrElse(teamId.get, basePayout)
         else basePayout * ownershipPct / BigDecimal(100)
-      val breakdown = Json.obj(
-        "position" -> pos.asJson,
-        "num_tied" -> numTied.asJson,
-        "base_payout" -> basePayout.asJson,
-        "ownership_pct" -> ownershipPct.asJson,
-        "payout" -> ownerPayout.asJson,
-        "multiplier" -> multiplier.asJson
-      )
+      val breakdown = ScoreBreakdown(pos, numTied, basePayout, ownershipPct, ownerPayout, multiplier)
       Some((basePayout, ownerPayout, breakdown))
 
   /** Pure: compute zero-sum weekly totals from team earnings. Each team's weekly = (team_top_tens * num_teams) -

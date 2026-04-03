@@ -1,5 +1,8 @@
 package com.cwfgw.espn
 
+import io.circe.derivation.ConfiguredCodec
+import com.cwfgw.domain.given
+
 /** An ESPN tournament parsed from the scoreboard API. */
 case class EspnTournament(espnId: String, name: String, completed: Boolean, competitors: List[EspnCompetitor])
 
@@ -23,4 +26,4 @@ case class EspnCompetitor(
 case class EspnAthlete(espnId: String, name: String)
 
 /** A calendar entry from the ESPN season schedule. */
-case class EspnCalendarEntry(id: String, label: String, startDate: String)
+case class EspnCalendarEntry(id: String, label: String, startDate: String) derives ConfiguredCodec

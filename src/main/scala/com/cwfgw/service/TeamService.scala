@@ -3,8 +3,9 @@ package com.cwfgw.service
 import cats.effect.IO
 import doobie.*
 import doobie.implicits.*
+import io.circe.derivation.ConfiguredCodec
 import java.util.UUID
-import com.cwfgw.domain.*
+import com.cwfgw.domain.{*, given}
 import com.cwfgw.repository.TeamRepository
 
 class TeamService(xa: Transactor[IO]):
@@ -41,5 +42,7 @@ class TeamService(xa: Transactor[IO]):
             )
         )
 
-case class RosterViewTeam(teamId: UUID, teamName: String, picks: List[RosterViewPick])
+case class RosterViewTeam(teamId: UUID, teamName: String, picks: List[RosterViewPick]) derives ConfiguredCodec
+
 case class RosterViewPick(round: Int, golferName: String, ownershipPct: BigDecimal, golferId: UUID)
+    derives ConfiguredCodec

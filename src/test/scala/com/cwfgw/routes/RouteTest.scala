@@ -187,10 +187,11 @@ class RouteTest extends FunSuite:
 
   private val scoringService = new ScoringService(null):
     override def getScores(seasonId: UUID, tournamentId: UUID): IO[List[FantasyScore]] = IO.pure(Nil)
-    override def calculateScores(seasonId: UUID, tournamentId: UUID): IO[Either[String, Json]] =
-      if seasonId == sampleId then IO.pure(Right(Json.obj("ok" -> true.asJson))) else IO.pure(Left("Season not found"))
-    override def getSideBetStandings(seasonId: UUID): IO[Either[String, Json]] = IO
-      .pure(Right(Json.obj("rounds" -> Json.arr())))
+    override def calculateScores(seasonId: UUID, tournamentId: UUID): IO[Either[String, WeeklyScoreResult]] =
+      if seasonId == sampleId then IO.pure(Right(WeeklyScoreResult(tournamentId, BigDecimal(1), 0, BigDecimal(0), Nil)))
+      else IO.pure(Left("Season not found"))
+    override def getSideBetStandings(seasonId: UUID): IO[Either[String, SideBetStandings]] = IO
+      .pure(Right(SideBetStandings(Nil, Nil)))
     override def refreshStandings(seasonId: UUID): IO[List[SeasonStanding]] = IO.pure(Nil)
 
   private val scoringRoutes = ScoringRoutes.routes(scoringService).orNotFound
@@ -302,12 +303,37 @@ class RouteTest extends FunSuite:
   // ================================================================
 
   private val reportService = new WeeklyReportService(null, null):
-    override def getReport(seasonId: UUID, tournamentId: UUID, live: Boolean): IO[Json] = IO
-      .pure(Json.obj("tournament" -> Json.obj("name" -> "Test Open".asJson)))
-    override def getRankings(seasonId: UUID, live: Boolean, throughTournamentId: Option[UUID]): IO[Json] = IO
-      .pure(Json.obj("teams" -> Json.arr()))
-    override def getGolferHistory(seasonId: UUID, golferId: UUID): IO[Json] = IO
-      .pure(Json.obj("golfer_name" -> "Scottie Scheffler".asJson))
+    override def getReport(
+      seasonId: UUID,
+      tournamentId: UUID,
+      live: Boolean
+    ): IO[WeeklyReport] = IO.pure(WeeklyReport(
+      tournament = ReportTournamentInfo(
+        None, Some("Test Open"), None, None,
+        None, BigDecimal(1), None
+      ),
+      teams = Nil,
+      undraftedTopTens = Nil,
+      sideBetDetail = Nil,
+      standingsOrder = Nil
+    ))
+    override def getRankings(
+      seasonId: UUID,
+      live: Boolean,
+      throughTournamentId: Option[UUID]
+    ): IO[Rankings] = IO.pure(Rankings(
+      teams = Nil, weeks = Nil, tournamentNames = Nil
+    ))
+    override def getGolferHistory(
+      seasonId: UUID,
+      golferId: UUID
+    ): IO[GolferHistory] = IO.pure(GolferHistory(
+      golferName = "Scottie Scheffler",
+      golferId = golferId,
+      totalEarnings = BigDecimal(0),
+      topTens = 0,
+      results = Nil
+    ))
 
   private val reportRoutes = ReportRoutes.routes(reportService).orNotFound
 

@@ -7,13 +7,14 @@ import doobie.implicits.*
 import doobie.postgres.implicits.*
 import doobie.postgres.circe.jsonb.implicits.*
 import io.circe.Json
+import io.circe.derivation.ConfiguredCodec
 import io.circe.syntax.*
 import org.typelevel.log4cats.LoggerFactory
 
 import java.util.UUID
 import java.time.LocalDate
 
-import com.cwfgw.domain.*
+import com.cwfgw.domain.{*, given}
 import com.cwfgw.espn.{EspnCalendarEntry, EspnClient, EspnCompetitor, EspnTournament}
 import com.cwfgw.repository.{GolferRepository, SeasonRepository, TeamRepository, TournamentRepository}
 
@@ -330,7 +331,7 @@ case class EspnImportResult(
   unmatched: List[String],
   created: Int,
   collisions: List[String] = Nil
-)
+) derives ConfiguredCodec
 
 case class ImportedPlayer(name: String, position: Int, matched: Boolean, created: Boolean)
 
@@ -342,7 +343,7 @@ case class EspnLivePreview(
   totalCompetitors: Int,
   teams: List[PreviewTeamScore],
   leaderboard: List[PreviewLeaderboardEntry]
-)
+) derives ConfiguredCodec
 
 case class PreviewTeamScore(
   teamId: UUID,
@@ -351,7 +352,7 @@ case class PreviewTeamScore(
   topTenEarnings: BigDecimal,
   golferScores: List[PreviewGolferScore],
   weeklyTotal: BigDecimal = BigDecimal(0)
-)
+) derives ConfiguredCodec
 
 case class PreviewGolferScore(
   golferName: String,
@@ -362,7 +363,7 @@ case class PreviewGolferScore(
   basePayout: BigDecimal,
   ownershipPct: BigDecimal,
   payout: BigDecimal
-)
+) derives ConfiguredCodec
 
 case class PreviewLeaderboardEntry(
   name: String,
@@ -371,4 +372,4 @@ case class PreviewLeaderboardEntry(
   thru: Option[String],
   rostered: Boolean,
   teamName: Option[String]
-)
+) derives ConfiguredCodec
