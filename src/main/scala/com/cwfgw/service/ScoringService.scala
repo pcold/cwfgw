@@ -148,10 +148,10 @@ class ScoringService(xa: Transactor[IO]):
     case Some(pos) =>
       val numTied = allResults.count(_.position == Some(pos))
       val basePayout = PayoutTable.tieSplitPayout(pos, numTied, multiplier, rules)
-      val ownerPayout =
-        if owners.size > 1 && teamId.isDefined then
-          PayoutTable.splitOwnership(basePayout, owners).getOrElse(teamId.get, basePayout)
-        else basePayout * ownershipPct / BigDecimal(100)
+      val ownerPayout = teamId match
+        case Some(tid) if owners.size > 1 =>
+          PayoutTable.splitOwnership(basePayout, owners).getOrElse(tid, basePayout)
+        case _ => basePayout * ownershipPct / BigDecimal(100)
       val breakdown = ScoreBreakdown(pos, numTied, basePayout, ownershipPct, ownerPayout, multiplier)
       Some((basePayout, ownerPayout, breakdown))
 

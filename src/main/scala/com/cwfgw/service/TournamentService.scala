@@ -46,23 +46,23 @@ class TournamentService(espnImportService: EspnImportService, scoringService: Sc
             .sortBy(_.startDate)
 
         checkOrder.flatMap: unfinalized =>
-          val blockMsg = checkBlockingTournaments(unfinalized, "finalize")
-          if blockMsg.isDefined then IO.pure(Left(blockMsg.get))
-          else
-            val pipeline =
-              for
-                _ <- logger.info(s"Finalizing '${tournament.name}'...")
-                importResults <- tournament.pgaTournamentId match
-                  case Some(espnId) => espnImportService.importSingleEvent(tournament.startDate, espnId).map(List(_))
-                  case None => espnImportService.importByDate(tournament.startDate)
-                _ <- logger.info(s"Imported ${importResults.size} event(s), calculating scores...")
-                _ <- scoringService.calculateScores(seasonId, tournamentId)
-                _ <- scoringService.refreshStandings(seasonId)
-                _ <- logger.info(s"Finalized '${tournament.name}'")
-              yield Right(s"Tournament '${tournament.name}' finalized successfully")
-            pipeline.handleErrorWith: err =>
-              logger.error(err)(s"Failed to finalize '${tournament.name}'") >>
-                IO.pure(Left(Option(err.getMessage).getOrElse(err.getClass.getSimpleName)))
+          checkBlockingTournaments(unfinalized, "finalize") match
+            case Some(msg) => IO.pure(Left(msg))
+            case None =>
+              val pipeline =
+                for
+                  _ <- logger.info(s"Finalizing '${tournament.name}'...")
+                  importResults <- tournament.pgaTournamentId match
+                    case Some(espnId) => espnImportService.importSingleEvent(tournament.startDate, espnId).map(List(_))
+                    case None => espnImportService.importByDate(tournament.startDate)
+                  _ <- logger.info(s"Imported ${importResults.size} event(s), calculating scores...")
+                  _ <- scoringService.calculateScores(seasonId, tournamentId)
+                  _ <- scoringService.refreshStandings(seasonId)
+                  _ <- logger.info(s"Finalized '${tournament.name}'")
+                yield Right(s"Tournament '${tournament.name}' finalized successfully")
+              pipeline.handleErrorWith: err =>
+                logger.error(err)(s"Failed to finalize '${tournament.name}'") >>
+                  IO.pure(Left(Option(err.getMessage).getOrElse(err.getClass.getSimpleName)))
 
   /** Reset a finalized tournament back to 'upcoming'. */
   def resetTournament(tournamentId: UUID): IO[Either[String, String]] = TournamentRepository.findById(tournamentId)
@@ -72,33 +72,28 @@ class TournamentService(espnImportService: EspnImportService, scoringService: Sc
         val seasonId = tournament.seasonId
         TournamentRepository.findAll(Some(seasonId), Some("completed")).transact(xa).flatMap: completed =>
           val later = completed.filter(t => t.id != tournamentId && t.startDate.isAfter(tournament.startDate))
-          val blockMsg = checkBlockingTournaments(later, "reset")
-          if blockMsg.isDefined then IO.pure(Left(blockMsg.get))
-          else
-            val deleteAndReset =
-              for
-                _ <- logger.info(s"Resetting '${tournament.name}'...")
-                scoresDeleted <- ScoreRepository.deleteByTournament(tournamentId).transact(xa)
-                resultsDeleted <- TournamentRepository.deleteResultsByTournament(tournamentId).transact(xa)
-                _ <- TournamentRepository.update(
-                  tournamentId,
-                  UpdateTournament(
-                    name = None,
-                    startDate = None,
-                    endDate = None,
-                    courseName = None,
-                    status = Some("upcoming"),
-                    purseAmount = None,
-                    payoutMultiplier = None
-                  )
-                ).transact(xa)
-                _ <- scoringService.refreshStandings(seasonId)
-                _ <- logger.info(s"Reset complete for '${tournament.name}'")
-              yield Right(s"Tournament '${tournament
-                  .name}' reset ($scoresDeleted scores, $resultsDeleted results deleted)")
-            deleteAndReset.handleErrorWith: err =>
-              logger.error(err)(s"Failed to reset '${tournament.name}'") >>
-                IO.pure(Left(Option(err.getMessage).getOrElse(err.getClass.getSimpleName)))
+          checkBlockingTournaments(later, "reset") match
+            case Some(msg) => IO.pure(Left(msg))
+            case None =>
+              val deleteAndReset =
+                for
+                  _ <- logger.info(s"Resetting '${tournament.name}'...")
+                  scoresDeleted <- ScoreRepository.deleteByTournament(tournamentId).transact(xa)
+                  resultsDeleted <- TournamentRepository.deleteResultsByTournament(tournamentId).transact(xa)
+                  _ <- TournamentRepository.update(
+                    tournamentId,
+                    UpdateTournament(
+                      name = None, startDate = None, endDate = None, courseName = None,
+                      status = Some("upcoming"), purseAmount = None, payoutMultiplier = None
+                    )
+                  ).transact(xa)
+                  _ <- scoringService.refreshStandings(seasonId)
+                  _ <- logger.info(s"Reset complete for '${tournament.name}'")
+                yield Right(s"Tournament '${tournament
+                    .name}' reset ($scoresDeleted scores, $resultsDeleted results deleted)")
+              deleteAndReset.handleErrorWith: err =>
+                logger.error(err)(s"Failed to reset '${tournament.name}'") >>
+                  IO.pure(Left(Option(err.getMessage).getOrElse(err.getClass.getSimpleName)))
 
   /** Delete all results, scores, and standings for a season, resetting every tournament back to 'upcoming'.
     */
@@ -132,10 +127,10 @@ class TournamentService(espnImportService: EspnImportService, scoringService: Sc
       result <- seasonOpt match
         case None => IO.pure(Left("Season not found"))
         case Some(season) => TournamentRepository.findAll(Some(seasonId), None).transact(xa).flatMap: tournaments =>
-            val seasonCheck = checkSeasonComplete(tournaments)
-            if seasonCheck.isDefined then IO.pure(Left(seasonCheck.get))
-            else
-              SeasonRepository
+            checkSeasonComplete(tournaments) match
+              case Some(msg) => IO.pure(Left(msg))
+              case None =>
+                SeasonRepository
                 .update(seasonId, UpdateSeason(
                   name = None, status = Some("completed"), maxTeams = None,
                   tieFloor = None, sideBetAmount = None

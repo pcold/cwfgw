@@ -8,13 +8,16 @@ case class ServerConfig(host: String, port: Int):
 
 case class DatabaseConfig(driver: String, url: String, user: String, password: String, poolSize: Int)
 
-case class AppConfig(server: ServerConfig, database: DatabaseConfig)
+case class AdminConfig(username: String, password: String)
+
+case class AppConfig(server: ServerConfig, database: DatabaseConfig, admin: AdminConfig)
 
 object AppConfig:
   import pureconfig.*
 
   given ConfigReader[ServerConfig] = ConfigReader.derived
   given ConfigReader[DatabaseConfig] = ConfigReader.derived
+  given ConfigReader[AdminConfig] = ConfigReader.derived
   given ConfigReader[AppConfig] = ConfigReader.derived
 
   def load: Either[pureconfig.error.ConfigReaderFailures, AppConfig] = ConfigSource.default.load[AppConfig]

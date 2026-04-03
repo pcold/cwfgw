@@ -60,7 +60,7 @@ object Main extends IOApp:
 
           val httpApp = Http4sLogger.httpApp(logHeaders = false, logBody = false)(Router("/" -> allRoutes).orNotFound)
 
-          authService.seedAdmin("admin", "AlsTheBoss") >>
+          authService.seedAdmin(config.admin.username, config.admin.password) >>
             EmberServerBuilder.default[IO].withHost(config.server.http4sHost).withPort(config.server.http4sPort)
               .withHttpApp(httpApp).build.useForever
     yield ExitCode.Success
