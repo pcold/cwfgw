@@ -65,99 +65,76 @@ class WeeklyReportService(
         allScores <- allTournaments.flatTraverse(t =>
           ScoreRepository.getScores(seasonId, t.id)
         )
-      yield
-        val rules = rulesOpt.getOrElse(SeasonRules.default)
-        val golferMap = allGolfers.map(g => g.id -> g).toMap
-        val resultsByGolfer =
-          results.map(r => r.golferId -> r).toMap
-        val scoresByTeamGolfer =
-          scores.map(s => (s.teamId, s.golferId) -> s).toMap
-        val multiplier = tournament
-          .map(_.payoutMultiplier)
-          .getOrElse(BigDecimal(1))
-        val numTeams = teams.size
+      yield (rulesOpt, teams, tournament, results, allGolfers, scores, allTournaments, allSeasonTournaments, allRosters,
+        allScores, tournamentId)
 
-        val throughTournaments = allTournaments.filter(t =>
-          tournament.forall(cur => tOnOrBefore(t, cur))
-        )
-        val throughScores = allScores.filter(s =>
-          throughTournaments.exists(_.id == s.tournamentId)
-        )
-
-        val priorWeeklyByTeam =
-          buildPriorWeekly(
-            throughTournaments, throughScores,
-            tournament, teams, numTeams
-          )
-
-        val cumulativeTopTenCounts = throughScores
-          .groupBy(_.teamId).view.mapValues(_.size).toMap
-        val cumulativeTopTenEarnings = throughScores
-          .groupBy(_.teamId).view
-          .mapValues(_.map(_.points).sum).toMap
-
-        val cumulativeByTeamGolfer = throughScores
-          .groupBy(s => (s.teamId, s.golferId)).view
-          .mapValues(ss =>
-            (ss.map(_.points).sum, ss.size)
-          ).toMap
-
-        val sideBetPerTeam = rules.sideBetAmount
-        val sideBetPerRound = buildSideBetPerRound(
-          rules, allRosters, throughScores,
-          numTeams, sideBetPerTeam
-        )
-        val sideBetResults = aggregateSideBets(sideBetPerRound)
-
-        val teamColumns = teams.map { team =>
-          buildReportTeamColumn(
-            team, allRosters, golferMap,
-            resultsByGolfer, results,
-            scoresByTeamGolfer, scores,
-            cumulativeByTeamGolfer,
-            priorWeeklyByTeam, cumulativeTopTenCounts,
-            cumulativeTopTenEarnings, sideBetResults,
-            numTeams
-          )
-        }
-
-        val rosteredGolferIds =
-          allRosters.map(_.golferId).toSet
-        val undraftedTopTens = buildUndraftedForTournament(
-          results, rosteredGolferIds, golferMap,
-          multiplier, rules
-        )
-
-        val sideBetDetail = buildSideBetDetail(
-          sideBetPerRound, teams, allRosters, golferMap
-        )
-
-        val priorNonCompleted = allSeasonTournaments
-          .filter(t =>
-            t.status != "completed" &&
-            t.id != tournamentId &&
-            tournament.forall(cur => tBefore(t, cur))
-          )
-
-        val info = buildTournamentInfo(tournament)
-
-        val report = WeeklyReport(
-          tournament = info,
-          teams = teamColumns,
-          undraftedTopTens = undraftedTopTens,
-          sideBetDetail = sideBetDetail,
-          standingsOrder = buildStandingsOrder(teamColumns)
-        )
-        (report, rules, priorNonCompleted, tournament)
-
-    action.transact(xa).flatMap {
-      (baseReport, txRules, priorNonCompleted, selTournament) =>
-        if !live then IO.pure(baseReport)
-        else liveOverlay.overlayReport(
-          seasonId, baseReport, txRules,
-          priorNonCompleted, selTournament, tournamentId
-        )
+    action.transact(xa).flatMap { data =>
+      val (rulesOpt, teams, tournament, results, allGolfers, scores, allTournaments, allSeasonTournaments, allRosters,
+        allScores, _) = data
+      val rules = rulesOpt.getOrElse(SeasonRules.default)
+      val (baseReport, priorNonCompleted) =
+        assembleWeeklyReport(rules, teams, tournament, results, allGolfers, scores, allTournaments,
+          allSeasonTournaments, allRosters, allScores, tournamentId)
+      if !live then IO.pure(baseReport)
+      else liveOverlay.overlayReport(seasonId, baseReport, rules, priorNonCompleted, tournament, tournamentId)
     }
+
+  /** Pure: assemble a weekly report from pre-fetched data. */
+  private[service] def assembleWeeklyReport(
+    rules: SeasonRules,
+    teams: List[Team],
+    tournament: Option[Tournament],
+    results: List[TournamentResult],
+    allGolfers: List[Golfer],
+    scores: List[FantasyScore],
+    allTournaments: List[Tournament],
+    allSeasonTournaments: List[Tournament],
+    allRosters: List[RosterEntry],
+    allScores: List[FantasyScore],
+    tournamentId: UUID
+  ): (WeeklyReport, List[Tournament]) =
+    val golferMap = allGolfers.map(g => g.id -> g).toMap
+    val resultsByGolfer = results.map(r => r.golferId -> r).toMap
+    val scoresByTeamGolfer = scores.map(s => (s.teamId, s.golferId) -> s).toMap
+    val multiplier = tournament.map(_.payoutMultiplier).getOrElse(BigDecimal(1))
+    val numTeams = teams.size
+
+    val throughTournaments = allTournaments.filter(t => tournament.forall(cur => tOnOrBefore(t, cur)))
+    val throughScores = allScores.filter(s => throughTournaments.exists(_.id == s.tournamentId))
+
+    val priorWeeklyByTeam = buildPriorWeekly(throughTournaments, throughScores, tournament, teams, numTeams)
+    val cumulativeTopTenCounts = throughScores.groupBy(_.teamId).view.mapValues(_.size).toMap
+    val cumulativeTopTenEarnings = throughScores.groupBy(_.teamId).view.mapValues(_.map(_.points).sum).toMap
+    val cumulativeByTeamGolfer = throughScores
+      .groupBy(s => (s.teamId, s.golferId)).view
+      .mapValues(ss => (ss.map(_.points).sum, ss.size)).toMap
+
+    val sideBetPerRound = buildSideBetPerRound(rules, allRosters, throughScores, numTeams, rules.sideBetAmount)
+    val sideBetResults = aggregateSideBets(sideBetPerRound)
+
+    val teamColumns = teams.map { team =>
+      buildReportTeamColumn(
+        team, allRosters, golferMap, resultsByGolfer, results, scoresByTeamGolfer, scores,
+        cumulativeByTeamGolfer, priorWeeklyByTeam, cumulativeTopTenCounts,
+        cumulativeTopTenEarnings, sideBetResults, numTeams
+      )
+    }
+
+    val rosteredGolferIds = allRosters.map(_.golferId).toSet
+    val undraftedTopTens = buildUndraftedForTournament(results, rosteredGolferIds, golferMap, multiplier, rules)
+    val sideBetDetail = buildSideBetDetail(sideBetPerRound, teams, allRosters, golferMap)
+    val priorNonCompleted = allSeasonTournaments.filter(t =>
+      t.status != "completed" && t.id != tournamentId && tournament.forall(cur => tBefore(t, cur))
+    )
+
+    val report = WeeklyReport(
+      tournament = buildTournamentInfo(tournament),
+      teams = teamColumns,
+      undraftedTopTens = undraftedTopTens,
+      sideBetDetail = sideBetDetail,
+      standingsOrder = buildStandingsOrder(teamColumns)
+    )
+    (report, priorNonCompleted)
 
   /** Build prior weekly zero-sum totals for tournaments
     * before the selected one.
@@ -390,101 +367,69 @@ class WeeklyReportService(
           .findAll(
             seasonId = Some(seasonId), status = None
           )
-      yield
-        val nonCompleted = allSeasonTournaments
-          .filter(_.status != "completed")
-        val rules = rulesOpt.getOrElse(SeasonRules.default)
-        val golferMap = allGolfers.map(g => g.id -> g).toMap
-        val numTeams = teams.size
+      yield (rulesOpt, teams, allGolfers, completed, allRosters, allScores, allResults, allSeasonTournaments)
 
-        val cumulativeByTeamGolfer = allScores
-          .groupBy(s => (s.teamId, s.golferId)).view
-          .mapValues(ss =>
-            (ss.map(_.points).sum, ss.size)
-          ).toMap
-
-        val topTensByTeam = allScores.groupBy(_.teamId)
-          .view.mapValues(_.map(_.points).sum).toMap
-        val topTenCountByTeam = allScores
-          .groupBy(_.teamId).view.mapValues(_.size).toMap
-        val totalPot = topTensByTeam.values.sum
-
-        val sideBetPerTeam = rules.sideBetAmount
-        val sideBetPerRound = buildSideBetPerRound(
-          rules, allRosters, allScores,
-          numTeams, sideBetPerTeam
-        )
-        val sideBetResults =
-          aggregateSideBets(sideBetPerRound)
-
-        val teamColumns = teams.map { team =>
-          val roster = allRosters
-            .filter(_.teamId == team.id)
-            .sortBy(_.draftRound)
-          val rows = buildSeasonRows(
-            roster, golferMap,
-            cumulativeByTeamGolfer, team.id
-          )
-          val teamTopTens = topTensByTeam
-            .getOrElse(team.id, BigDecimal(0))
-          val weeklyTotal =
-            teamTopTens * numTeams - totalPot
-          val topTenCount = topTenCountByTeam
-            .getOrElse(team.id, 0)
-          val sideBetTotal = sideBetResults
-            .getOrElse(team.id, BigDecimal(0))
-
-          ReportTeamColumn(
-            teamId = team.id,
-            teamName = team.teamName,
-            ownerName = team.ownerName,
-            rows = rows,
-            topTens = teamTopTens,
-            weeklyTotal = weeklyTotal,
-            previous = BigDecimal(0),
-            subtotal = weeklyTotal,
-            topTenCount = topTenCount,
-            topTenMoney = teamTopTens,
-            sideBets = sideBetTotal,
-            totalCash = weeklyTotal + sideBetTotal
-          )
-        }
-
-        val rosteredGolferIds =
-          allRosters.map(_.golferId).toSet
-        val undraftedAgg = buildUndraftedAgg(
-          allResults, completed, rosteredGolferIds,
-          golferMap, rules
-        )
-
-        val sideBetDetail = buildSideBetDetail(
-          sideBetPerRound, teams, allRosters, golferMap
-        )
-
-        val info = ReportTournamentInfo(
-          id = None,
-          name = Some("All Tournaments"),
-          startDate = None,
-          endDate = None,
-          status = Some("season"),
-          payoutMultiplier = BigDecimal(1),
-          week = None
-        )
-
-        val report = WeeklyReport(
-          tournament = info,
-          teams = teamColumns,
-          undraftedTopTens = undraftedAgg,
-          sideBetDetail = sideBetDetail,
-          standingsOrder = buildStandingsOrder(teamColumns)
-        )
-        (report, rules, nonCompleted)
-
-    action.transact(xa).flatMap {
-      (baseReport, rules, nonCompleted) =>
-        if live then liveOverlay.overlaySeasonReport(seasonId, baseReport, rules, nonCompleted)
-        else IO.pure(baseReport)
+    action.transact(xa).flatMap { data =>
+      val (rulesOpt, teams, allGolfers, completed, allRosters, allScores, allResults, allSeasonTournaments) = data
+      val rules = rulesOpt.getOrElse(SeasonRules.default)
+      val nonCompleted = allSeasonTournaments.filter(_.status != "completed")
+      val baseReport = assembleSeasonReport(rules, teams, allGolfers, completed, allRosters, allScores, allResults)
+      if live then liveOverlay.overlaySeasonReport(seasonId, baseReport, rules, nonCompleted)
+      else IO.pure(baseReport)
     }
+
+  /** Pure: assemble a season report from pre-fetched data. */
+  private[service] def assembleSeasonReport(
+    rules: SeasonRules,
+    teams: List[Team],
+    allGolfers: List[Golfer],
+    completed: List[Tournament],
+    allRosters: List[RosterEntry],
+    allScores: List[FantasyScore],
+    allResults: List[TournamentResult]
+  ): WeeklyReport =
+    val golferMap = allGolfers.map(g => g.id -> g).toMap
+    val numTeams = teams.size
+    val cumulativeByTeamGolfer = allScores
+      .groupBy(s => (s.teamId, s.golferId)).view
+      .mapValues(ss => (ss.map(_.points).sum, ss.size)).toMap
+    val topTensByTeam = allScores.groupBy(_.teamId).view.mapValues(_.map(_.points).sum).toMap
+    val topTenCountByTeam = allScores.groupBy(_.teamId).view.mapValues(_.size).toMap
+    val totalPot = topTensByTeam.values.sum
+
+    val sideBetPerRound = buildSideBetPerRound(rules, allRosters, allScores, numTeams, rules.sideBetAmount)
+    val sideBetResults = aggregateSideBets(sideBetPerRound)
+
+    val teamColumns = teams.map { team =>
+      val roster = allRosters.filter(_.teamId == team.id).sortBy(_.draftRound)
+      val rows = buildSeasonRows(roster, golferMap, cumulativeByTeamGolfer, team.id)
+      val teamTopTens = topTensByTeam.getOrElse(team.id, BigDecimal(0))
+      val weeklyTotal = teamTopTens * numTeams - totalPot
+      val topTenCount = topTenCountByTeam.getOrElse(team.id, 0)
+      val sideBetTotal = sideBetResults.getOrElse(team.id, BigDecimal(0))
+      ReportTeamColumn(
+        teamId = team.id, teamName = team.teamName, ownerName = team.ownerName,
+        rows = rows, topTens = teamTopTens, weeklyTotal = weeklyTotal,
+        previous = BigDecimal(0), subtotal = weeklyTotal,
+        topTenCount = topTenCount, topTenMoney = teamTopTens,
+        sideBets = sideBetTotal, totalCash = weeklyTotal + sideBetTotal
+      )
+    }
+
+    val rosteredGolferIds = allRosters.map(_.golferId).toSet
+    val undraftedAgg = buildUndraftedAgg(allResults, completed, rosteredGolferIds, golferMap, rules)
+    val sideBetDetail = buildSideBetDetail(sideBetPerRound, teams, allRosters, golferMap)
+
+    WeeklyReport(
+      tournament = ReportTournamentInfo(
+        id = None, name = Some("All Tournaments"), startDate = None,
+        endDate = None, status = Some("season"), payoutMultiplier = BigDecimal(1), week = None
+      ),
+      teams = teamColumns,
+      undraftedTopTens = undraftedAgg,
+      sideBetDetail = sideBetDetail,
+      standingsOrder = buildStandingsOrder(teamColumns)
+    )
 
   // --------------------------------------------------
   // Season row / undrafted helpers
