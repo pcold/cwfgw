@@ -1,6 +1,7 @@
 package com.cwfgw
 
 import cats.effect.{IO, IOApp, ExitCode, Ref}
+import cats.effect.std.Semaphore
 import cats.syntax.semigroupk.*
 
 import com.comcast.ip4s.*
@@ -30,6 +31,7 @@ object Main extends IOApp:
       _ <- logger.info("Running database migrations...")
       _ <- FlywayMigrator.migrate(config.database)
       sessions <- Ref.of[IO, Map[String, String]](Map.empty)
+      tournamentMutex <- Semaphore[IO](1)
       _ <- logger.info(s"Server configured for ${config.server.host}:${config.server.port}")
       _ <- Database.transactor(config.database).use: xa =>
         EspnClient.resource.use: espnClient =>
@@ -40,7 +42,7 @@ object Main extends IOApp:
           val draftService = DraftService(xa)
           val scoringService = ScoringService(xa)
           val espnImportService = EspnImportService(espnClient, xa)
-          val tournamentService = TournamentService(espnImportService, scoringService, xa)
+          val tournamentService = TournamentService(espnImportService, scoringService, xa, tournamentMutex)
           val liveOverlay = LiveOverlayService(espnImportService)
           val weeklyReportService = WeeklyReportService(liveOverlay, xa)
           val adminService = AdminService(espnClient, xa)
@@ -51,14 +53,16 @@ object Main extends IOApp:
               EspnRoutes.adminRoutes(espnImportService)
           )
 
-          val allRoutes = StaticRoutes.routes <+> HealthRoutes.routes <+> AuthRoutes.routes(authService) <+>
+          val allRoutes = StaticRoutes.routes <+> HealthRoutes.routes(xa) <+> AuthRoutes.routes(authService) <+>
             protectedRoutes <+> LeagueRoutes.routes(leagueService) <+> SeasonRoutes.routes(seasonService) <+>
             GolferRoutes.routes(golferService) <+> TournamentRoutes.routes(tournamentService) <+>
             TeamRoutes.routes(teamService) <+> DraftRoutes.routes(draftService) <+>
             ScoringRoutes.routes(scoringService) <+> ReportRoutes.routes(weeklyReportService) <+>
             EspnRoutes.routes(espnImportService)
 
-          val httpApp = Http4sLogger.httpApp(logHeaders = false, logBody = false)(Router("/" -> allRoutes).orNotFound)
+          val baseApp = Router("/" -> allRoutes).orNotFound
+          val safeApp = ErrorHandlingMiddleware(baseApp)
+          val httpApp = Http4sLogger.httpApp(logHeaders = false, logBody = false)(safeApp)
 
           authService.seedAdmin(config.admin.username, config.admin.password) >>
             EmberServerBuilder.default[IO].withHost(config.server.http4sHost).withPort(config.server.http4sPort)

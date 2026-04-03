@@ -10,7 +10,7 @@ import org.typelevel.log4cats.LoggerFactory
 import java.net.URI
 import java.net.http.{HttpClient as JHttpClient, HttpRequest, HttpResponse}
 import java.security.KeyStore
-import java.time.LocalDate
+import java.time.{Duration as JDuration, LocalDate}
 import java.time.format.DateTimeFormatter
 import javax.net.ssl.{SSLContext, TrustManagerFactory}
 
@@ -204,6 +204,6 @@ object EspnClient:
         // Not on macOS or KeychainStore unavailable, use JDK default
         tmf.init(null: KeyStore)
     sslContext.init(null, tmf.getTrustManagers, null)
-    val client = JHttpClient.newBuilder().sslContext(sslContext).build()
+    val client = JHttpClient.newBuilder().sslContext(sslContext).connectTimeout(JDuration.ofSeconds(10)).build()
     EspnClient(client)
   })

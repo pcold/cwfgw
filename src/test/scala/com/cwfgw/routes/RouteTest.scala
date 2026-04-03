@@ -1,6 +1,7 @@
 package com.cwfgw.routes
 
 import cats.effect.IO
+import cats.effect.std.Semaphore
 import cats.effect.unsafe.implicits.global
 import io.circe.Json
 import io.circe.syntax.*
@@ -380,7 +381,7 @@ class RouteTest extends FunSuite:
     sampleInstant
   )
 
-  private val tournamentService = new TournamentService(null, null, null):
+  private val tournamentService = new TournamentService(null, null, null, Semaphore[IO](1).unsafeRunSync()):
     override def list(seasonId: Option[UUID], status: Option[String]): IO[List[Tournament]] =
       val filtered = if seasonId.contains(sampleId) then List(sampleTournament) else Nil
       IO.pure(filtered)

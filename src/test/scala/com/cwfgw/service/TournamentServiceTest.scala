@@ -7,12 +7,14 @@ import com.cwfgw.domain.Tournament
 import org.typelevel.log4cats.LoggerFactory
 import org.typelevel.log4cats.noop.NoOpFactory
 import cats.effect.IO
+import cats.effect.std.Semaphore
+import cats.effect.unsafe.implicits.global
 
 class TournamentServiceTest extends FunSuite:
 
   private given LoggerFactory[IO] = NoOpFactory[IO]
 
-  private val service = new TournamentService(null, null, null)
+  private val service = new TournamentService(null, null, null, Semaphore[IO](1).unsafeRunSync())
   private val now = Instant.now()
   private val seasonId = UUID.randomUUID()
 

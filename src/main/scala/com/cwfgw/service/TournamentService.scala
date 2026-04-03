@@ -1,6 +1,7 @@
 package com.cwfgw.service
 
 import cats.effect.IO
+import cats.effect.std.Semaphore
 import cats.implicits.*
 import doobie.*
 import doobie.implicits.*
@@ -9,9 +10,12 @@ import java.util.UUID
 import com.cwfgw.domain.*
 import com.cwfgw.repository.{ScoreRepository, SeasonRepository, TournamentRepository}
 
-class TournamentService(espnImportService: EspnImportService, scoringService: ScoringService, xa: Transactor[IO])(using
-  LoggerFactory[IO]
-):
+class TournamentService(
+  espnImportService: EspnImportService,
+  scoringService: ScoringService,
+  xa: Transactor[IO],
+  mutex: Semaphore[IO]
+)(using LoggerFactory[IO]):
 
   private val logger = LoggerFactory[IO].getLogger
 
@@ -33,8 +37,8 @@ class TournamentService(espnImportService: EspnImportService, scoringService: Sc
   /** Finalize a tournament: import ESPN results, calculate scores, refresh standings. Rejects if any earlier tournament
     * in the same season has not been finalized yet.
     */
-  def finalizeTournament(tournamentId: UUID): IO[Either[String, String]] = TournamentRepository.findById(tournamentId)
-    .transact(xa).flatMap:
+  def finalizeTournament(tournamentId: UUID): IO[Either[String, String]] = mutex.permit.surround:
+    TournamentRepository.findById(tournamentId).transact(xa).flatMap:
       case None => IO.pure(Left("Tournament not found"))
       case Some(tournament) =>
         val seasonId = tournament.seasonId
@@ -65,8 +69,8 @@ class TournamentService(espnImportService: EspnImportService, scoringService: Sc
                   IO.pure(Left(Option(err.getMessage).getOrElse(err.getClass.getSimpleName)))
 
   /** Reset a finalized tournament back to 'upcoming'. */
-  def resetTournament(tournamentId: UUID): IO[Either[String, String]] = TournamentRepository.findById(tournamentId)
-    .transact(xa).flatMap:
+  def resetTournament(tournamentId: UUID): IO[Either[String, String]] = mutex.permit.surround:
+    TournamentRepository.findById(tournamentId).transact(xa).flatMap:
       case None => IO.pure(Left("Tournament not found"))
       case Some(tournament) =>
         val seasonId = tournament.seasonId
@@ -102,8 +106,8 @@ class TournamentService(espnImportService: EspnImportService, scoringService: Sc
 
   /** Delete all results, scores, and standings for a season, resetting every tournament back to 'upcoming'.
     */
-  def cleanSeasonResults(seasonId: UUID): IO[Either[String, String]] = SeasonRepository.findById(seasonId).transact(xa)
-    .flatMap:
+  def cleanSeasonResults(seasonId: UUID): IO[Either[String, String]] = mutex.permit.surround:
+    SeasonRepository.findById(seasonId).transact(xa).flatMap:
       case None => IO.pure(Left("Season not found"))
       case Some(season) =>
         val clean =
@@ -126,7 +130,7 @@ class TournamentService(espnImportService: EspnImportService, scoringService: Sc
             IO.pure(Left(Option(err.getMessage).getOrElse(err.getClass.getSimpleName)))
 
   /** Finalize a season: all tournaments must be completed. */
-  def finalizeSeason(seasonId: UUID): IO[Either[String, String]] =
+  def finalizeSeason(seasonId: UUID): IO[Either[String, String]] = mutex.permit.surround:
     for
       seasonOpt <- SeasonRepository.findById(seasonId).transact(xa)
       result <- seasonOpt match

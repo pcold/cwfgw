@@ -295,7 +295,7 @@ class WeeklyReportService(liveOverlay: LiveOverlayService, xa: Transactor[IO])(u
   ): List[UndraftedGolfer] = results.filter(r => r.position.exists(_ <= 10) && !rosteredGolferIds.contains(r.golferId))
     .sortBy(_.position).map { r =>
       val golfer = golferMap.get(r.golferId)
-      val name = golfer.map(g => s"${g.firstName.head}. ${g.lastName}").getOrElse("?")
+      val name = golfer.map(g => s"${g.firstName.headOption.getOrElse('?')}. ${g.lastName}").getOrElse("?")
       val numTied = results.count(_.position == r.position)
       val payout = PayoutTable.tieSplitPayout(r.position.getOrElse(99), numTied, multiplier, rules)
       val stpStr = r.scoreToPar.map(formatStp)
@@ -480,7 +480,8 @@ class WeeklyReportService(liveOverlay: LiveOverlayService, xa: Transactor[IO])(u
     rules: SeasonRules
   ): List[UndraftedGolfer] = allResults.filter(r => r.position.exists(_ <= 10) && !rosteredGolferIds.contains(r.golferId))
     .groupBy(_.golferId).toList.map { (golferId, results) =>
-      val name = golferMap.get(golferId).map(g => s"${g.firstName.head}. ${g.lastName}").getOrElse("?")
+      val name = golferMap.get(golferId).map(g => s"${g.firstName.headOption.getOrElse('?')}. ${g.lastName}")
+        .getOrElse("?")
       val totalPayout = results.map { r =>
         val tournament = completed.find(_.id == r.tournamentId)
         val multiplier = tournament.map(_.payoutMultiplier).getOrElse(BigDecimal(1))
