@@ -312,3 +312,101 @@ class ServiceCodecTest extends FunSuite:
     assertEquals(json.hcursor.downField("start_date").as[String], Right("2026-07-16"))
     assertEquals(decode[EspnCalendarEntry](json.noSpaces), Right(e))
   }
+
+  // ==============================================================
+  // ScoringService DTOs
+  // ==============================================================
+
+  test("ScoreBreakdown round-trips") {
+    val bd = ScoreBreakdown(
+      position = 3,
+      numTied = 2,
+      basePayout = BigDecimal(9),
+      ownershipPct = BigDecimal(75),
+      payout = BigDecimal("6.75"),
+      multiplier = BigDecimal(2)
+    )
+    val json = bd.asJson
+    assertEquals(json.hcursor.downField("num_tied").as[Int], Right(2))
+    assertEquals(json.hcursor.downField("base_payout").as[BigDecimal], Right(BigDecimal(9)))
+    assertEquals(json.hcursor.downField("ownership_pct").as[BigDecimal], Right(BigDecimal(75)))
+    assertEquals(decode[ScoreBreakdown](json.noSpaces), Right(bd))
+  }
+
+  test("GolferScoreEntry round-trips") {
+    val bd = ScoreBreakdown(1, 1, BigDecimal(18), BigDecimal(100), BigDecimal(18), BigDecimal(1))
+    val entry = GolferScoreEntry(id1, BigDecimal(18), bd)
+    val json = entry.asJson
+    assertEquals(json.hcursor.downField("golfer_id").as[String], Right(id1.toString))
+    assertEquals(decode[GolferScoreEntry](json.noSpaces), Right(entry))
+  }
+
+  test("TeamWeeklyResult round-trips") {
+    val result = TeamWeeklyResult(id1, "Team A", BigDecimal(18), BigDecimal(6), Nil)
+    val json = result.asJson
+    assertEquals(json.hcursor.downField("team_name").as[String], Right("Team A"))
+    assertEquals(json.hcursor.downField("top_tens").as[BigDecimal], Right(BigDecimal(18)))
+    assertEquals(json.hcursor.downField("weekly_total").as[BigDecimal], Right(BigDecimal(6)))
+    assertEquals(decode[TeamWeeklyResult](json.noSpaces), Right(result))
+  }
+
+  test("WeeklyScoreResult round-trips") {
+    val result = WeeklyScoreResult(id1, BigDecimal(2), 13, BigDecimal(50), Nil)
+    val json = result.asJson
+    assertEquals(json.hcursor.downField("tournament_id").as[String], Right(id1.toString))
+    assertEquals(json.hcursor.downField("num_teams").as[Int], Right(13))
+    assertEquals(json.hcursor.downField("total_pot").as[BigDecimal], Right(BigDecimal(50)))
+    assertEquals(decode[WeeklyScoreResult](json.noSpaces), Right(result))
+  }
+
+  test("SideBetEntry round-trips") {
+    val entry = SideBetEntry(id1, "Team A", id2, BigDecimal("42.5"))
+    val json = entry.asJson
+    assertEquals(json.hcursor.downField("cumulative_earnings").as[BigDecimal], Right(BigDecimal("42.5")))
+    assertEquals(decode[SideBetEntry](json.noSpaces), Right(entry))
+  }
+
+  test("SideBetWinner round-trips") {
+    val winner = SideBetWinner(id1, "Team A", id2, BigDecimal(50), BigDecimal(180))
+    val json = winner.asJson
+    assertEquals(json.hcursor.downField("net_winnings").as[BigDecimal], Right(BigDecimal(180)))
+    assertEquals(decode[SideBetWinner](json.noSpaces), Right(winner))
+  }
+
+  test("SideBetRound round-trips with winner") {
+    val round = SideBetRound(
+      5,
+      active = true,
+      Some(SideBetWinner(id1, "Team A", id2, BigDecimal(50), BigDecimal(180))),
+      List(SideBetEntry(id1, "Team A", id2, BigDecimal(50)))
+    )
+    val json = round.asJson
+    assertEquals(json.hcursor.downField("round").as[Int], Right(5))
+    assertEquals(json.hcursor.downField("active").as[Boolean], Right(true))
+    assertEquals(decode[SideBetRound](json.noSpaces), Right(round))
+  }
+
+  test("SideBetRound round-trips without winner") {
+    val round = SideBetRound(6, active = false, None, Nil)
+    val json = round.asJson
+    assertEquals(json.hcursor.downField("winner").as[Option[SideBetWinner]], Right(None))
+    assertEquals(decode[SideBetRound](json.noSpaces), Right(round))
+  }
+
+  test("SideBetTeamTotal round-trips") {
+    val total = SideBetTeamTotal(id1, "Team A", 3, BigDecimal(150))
+    val json = total.asJson
+    assertEquals(json.hcursor.downField("wins").as[Int], Right(3))
+    assertEquals(json.hcursor.downField("net").as[BigDecimal], Right(BigDecimal(150)))
+    assertEquals(decode[SideBetTeamTotal](json.noSpaces), Right(total))
+  }
+
+  test("SideBetStandings round-trips") {
+    val standings = SideBetStandings(
+      List(SideBetRound(5, active = false, None, Nil)),
+      List(SideBetTeamTotal(id1, "Team A", 0, BigDecimal(0)))
+    )
+    val json = standings.asJson
+    assertEquals(json.hcursor.downField("team_totals").as[List[SideBetTeamTotal]], Right(standings.teamTotals))
+    assertEquals(decode[SideBetStandings](json.noSpaces), Right(standings))
+  }

@@ -6,7 +6,7 @@ import munit.FunSuite
 import java.time.Instant
 import java.util.UUID
 
-import com.cwfgw.domain.{SeasonRules, TournamentResult}
+import com.cwfgw.domain.{SeasonRules, TournamentResult, given}
 
 class ScoringServiceTest extends FunSuite:
 
@@ -93,17 +93,17 @@ class ScoringServiceTest extends FunSuite:
     assertEquals(result, None)
   }
 
-  test("calculateGolferPayout: breakdown JSON has correct fields") {
+  test("calculateGolferPayout: breakdown has correct fields") {
     val gid = UUID.randomUUID()
     val results = List(makeResult(gid, Some(5)))
     val result = service.calculateGolferPayout(Some(5), results, BigDecimal(50), x2, rules)
     val (_, _, breakdown) = result.get
-    assertEquals(breakdown.hcursor.downField("position").as[Int], Right(5))
-    assertEquals(breakdown.hcursor.downField("num_tied").as[Int], Right(1))
-    assertEquals(breakdown.hcursor.downField("base_payout").as[BigDecimal], Right(BigDecimal(14)))
-    assertEquals(breakdown.hcursor.downField("ownership_pct").as[BigDecimal], Right(BigDecimal(50)))
-    assertEquals(breakdown.hcursor.downField("payout").as[BigDecimal], Right(BigDecimal(7)))
-    assertEquals(breakdown.hcursor.downField("multiplier").as[BigDecimal], Right(x2))
+    assertEquals(breakdown.position, 5)
+    assertEquals(breakdown.numTied, 1)
+    assertEquals(breakdown.basePayout, BigDecimal(14))
+    assertEquals(breakdown.ownershipPct, BigDecimal(50))
+    assertEquals(breakdown.payout, BigDecimal(7))
+    assertEquals(breakdown.multiplier, x2)
   }
 
   test("calculateGolferPayout: 50% ownership of T10 at 2x with floor") {
