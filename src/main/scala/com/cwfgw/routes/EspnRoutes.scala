@@ -20,7 +20,8 @@ object EspnRoutes:
     "total_competitors" -> r.totalCompetitors.asJson,
     "matched" -> r.matched.asJson,
     "created" -> r.created.asJson,
-    "unmatched" -> r.unmatched.asJson
+    "unmatched" -> r.unmatched.asJson,
+    "collisions" -> r.collisions.asJson
   )
 
   private def livePreviewToJson(p: EspnLivePreview): Json = Json.obj(

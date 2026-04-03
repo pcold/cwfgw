@@ -238,7 +238,15 @@ class WeeklyReportService(
           val name = golfer.map(g => s"${g.firstName.head}. ${g.lastName}").getOrElse("?")
           val numTied = results.count(_.position == r.position)
           val payout = PayoutTable.tieSplitPayout(r.position.getOrElse(99), numTied, multiplier, rules)
-          Json.obj("name" -> name.asJson, "position" -> r.position.asJson, "payout" -> payout.asJson)
+          val stpStr = r.scoreToPar.map(s =>
+            if s == 0 then "E" else if s > 0 then s"+$s" else s.toString
+          )
+          Json.obj(
+            "name" -> name.asJson,
+            "position" -> r.position.asJson,
+            "payout" -> payout.asJson,
+            "score_to_par" -> stpStr.asJson
+          )
 
       // Build side bet detail per round
       val sideBetDetail = sideBetPerRound.map: (round, cumEarnings, payouts) =>

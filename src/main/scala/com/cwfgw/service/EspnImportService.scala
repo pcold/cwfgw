@@ -232,34 +232,67 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
       // Load all golfers for name matching
       allGolfers <- GolferRepository.findAll(activeOnly = false, search = None)
 
-      // Process each competitor
-      results <- espn.competitors.traverse: competitor =>
-        matchGolfer(competitor, allGolfers).flatMap:
-          case None =>
-            FC.pure(ImportedPlayer(competitor.name, competitor.position, matched = false, created = false))
-          case Some((golferId, created)) =>
-            val roundScoresJson = Json.arr(competitor.roundScores.map(s => Json.fromInt(s))*)
-            TournamentRepository.upsertResult(tournamentId, CreateTournamentResult(
-              golferId = golferId,
-              position = Some(competitor.position),
-              scoreToPar = competitor.scoreToPar,
-              totalStrokes = competitor.totalStrokes,
-              earnings = None,
-              roundScores = Some(roundScoresJson),
-              madeCut = competitor.madeCut
-            )).map: _ =>
-              ImportedPlayer(competitor.name, competitor.position, matched = true, created = created)
+      // Process each competitor, tracking golfer ID collisions
+      results <- espn.competitors.foldLeft(
+        FC.pure(List.empty[(ImportedPlayer, Option[UUID])])
+      ) { (accIO, competitor) =>
+        accIO.flatMap { acc =>
+          matchGolfer(competitor, allGolfers).flatMap {
+            case None =>
+              val player = ImportedPlayer(
+                competitor.name, competitor.position,
+                matched = false, created = false
+              )
+              FC.pure(acc :+ (player, None))
+            case Some((golferId, created)) =>
+              val roundScoresJson = Json.arr(
+                competitor.roundScores.map(s => Json.fromInt(s))*
+              )
+              TournamentRepository.upsertResult(
+                tournamentId,
+                CreateTournamentResult(
+                  golferId = golferId,
+                  position = Some(competitor.position),
+                  scoreToPar = competitor.scoreToPar,
+                  totalStrokes = competitor.totalStrokes,
+                  earnings = None,
+                  roundScores = Some(roundScoresJson),
+                  madeCut = competitor.madeCut
+                )
+              ).map { _ =>
+                val player = ImportedPlayer(
+                  competitor.name, competitor.position,
+                  matched = true, created = created
+                )
+                acc :+ (player, Some(golferId))
+              }
+          }
+        }
+      }
+      playerResults = results.map(_._1)
+      // Detect golfer ID collisions (two ESPN competitors → same DB golfer)
+      collisions = results
+        .collect { case (p, Some(gid)) => (gid, p.name, p.position) }
+        .groupBy(_._1)
+        .filter(_._2.size > 1)
+        .values.toList
+        .map(_.map(t => s"${t._2} (pos ${t._3})").mkString(" & "))
     yield EspnImportResult(
       tournamentId = tournamentId,
       espnName = espn.name,
       espnId = espn.espnId,
       completed = espn.completed,
       totalCompetitors = espn.competitors.size,
-      matched = results.count(_.matched),
-      unmatched = results.filterNot(_.matched).map(_.name),
-      created = results.count(_.created)
+      matched = playerResults.count(_.matched),
+      unmatched = playerResults.filterNot(_.matched).map(_.name),
+      created = playerResults.count(_.created),
+      collisions = collisions
     )
-    action.transact(xa)
+    action.transact(xa).flatTap { result =>
+      result.collisions.traverse_(c =>
+        logger.warn(s"COLLISION: golfer mapped to multiple ESPN competitors: $c")
+      )
+    }
 
   /** Try to match an ESPN competitor to a golfer in our DB.
     * Strategy:
@@ -300,7 +333,14 @@ private[service] enum GolferMatchResult:
   case NoMatch(firstName: String, lastName: String)
 
 /** Pure: match a competitor name against a list of golfers.
-  * Strategy: exact full name → unique last name → no match. */
+  * Strategy: exact full name → unique last name (only when first name
+  * is missing or abbreviated) → no match.
+  *
+  * Last-name-only matching is restricted to cases where the competitor
+  * has no usable first name (single-word name) or uses an abbreviation
+  * (1-2 chars like "J." or "JT"). Full first names that don't match
+  * the DB golfer fall through to auto-create, preventing cross-matching
+  * of different players who share a last name. */
 private[service] def findGolferMatch(
     competitorName: String, espnId: String, allGolfers: List[Golfer]
 ): GolferMatchResult =
@@ -313,10 +353,14 @@ private[service] def findGolferMatch(
   byFullName match
     case Some(g) => GolferMatchResult.FullNameMatch(g)
     case None =>
-      // 2. Unique last name match
+      // 2. Unique last name match — only when first name is absent or
+      //    abbreviated (≤2 chars, e.g. "J." or "JT"), to avoid mismatches
+      //    like "Jesper Svensson" → "Adam Svensson"
+      val isAbbreviated = first.replaceAll("\\.", "").length <= 2
       val byLastName = allGolfers.filter(_.lastName.equalsIgnoreCase(last))
       byLastName match
-        case g :: Nil => GolferMatchResult.LastNameMatch(g)
+        case g :: Nil if first.isEmpty || isAbbreviated =>
+          GolferMatchResult.LastNameMatch(g)
         case _ => GolferMatchResult.NoMatch(first, last)
 
 case class EspnImportResult(
@@ -327,7 +371,8 @@ case class EspnImportResult(
     totalCompetitors: Int,
     matched: Int,
     unmatched: List[String],
-    created: Int
+    created: Int,
+    collisions: List[String] = Nil
 )
 
 case class ImportedPlayer(

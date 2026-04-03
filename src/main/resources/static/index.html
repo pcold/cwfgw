@@ -1570,7 +1570,9 @@ TEAM 2 BURRELL
               const leaderboard = (data.undrafted_top_tens || []).map(e => ({
                 name: e.name,
                 position: e.position,
-                score_to_par: null,
+                score_to_par: e.score_to_par
+                  ? (e.score_to_par === 'E' ? 0 : parseInt(e.score_to_par))
+                  : null,
                 rostered: false,
                 team_name: null
               }));

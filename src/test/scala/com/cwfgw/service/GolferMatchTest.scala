@@ -59,17 +59,28 @@ class GolferMatchTest extends FunSuite:
   // Last name only match (unique)
   // ================================================================
 
-  test("unique last name match: Scheffler") {
-    // Remove full name match by using wrong first name, but there's only one Scheffler
+  test("abbreviated first name triggers last name match") {
+    // "S. Scheffler" has abbreviated first name (≤2 chars) → safe to last-name match
     val golfers = List(scheffler, mcilroy, rahm)
-    val result = findGolferMatch("Scott Scheffler", "espn1", golfers) // wrong first name
+    val result = findGolferMatch("S. Scheffler", "espn1", golfers)
     result match
       case GolferMatchResult.LastNameMatch(g) => assertEquals(g.id, scheffler.id)
       case other => fail(s"Expected LastNameMatch, got $other")
   }
 
-  test("unique last name match: Rahm") {
-    val result = findGolferMatch("Jonathan Rahm", "espn3", allGolfers) // wrong first name
+  test("full first name mismatch yields NoMatch, not LastNameMatch") {
+    // "Scott Scheffler" is a full first name that doesn't match "Scottie" →
+    // should auto-create rather than risk a collision
+    val golfers = List(scheffler, mcilroy, rahm)
+    val result = findGolferMatch("Scott Scheffler", "espn1", golfers)
+    result match
+      case GolferMatchResult.NoMatch(_, _) => ()
+      case other => fail(s"Expected NoMatch, got $other")
+  }
+
+  test("two-char abbreviation triggers last name match") {
+    // "JT Rahm" has abbreviated first name (2 chars) → safe to last-name match
+    val result = findGolferMatch("JT Rahm", "espn3", allGolfers)
     result match
       case GolferMatchResult.LastNameMatch(g) => assertEquals(g.id, rahm.id)
       case other => fail(s"Expected LastNameMatch, got $other")
@@ -144,6 +155,29 @@ class GolferMatchTest extends FunSuite:
     result match
       case GolferMatchResult.NoMatch(_, _) => () // expected
       case other => fail(s"Expected NoMatch, got $other")
+  }
+
+  test("last name match rejected when first initials differ") {
+    // "Adam Svensson" in DB, ESPN sends "Jesper Svensson" — different initials
+    val svensson = golfer(8, "Adam", "Svensson")
+    val golfers = List(scheffler, svensson)
+    val result = findGolferMatch("Jesper Svensson", "espn8", golfers)
+    result match
+      case GolferMatchResult.NoMatch(first, last) =>
+        assertEquals(first, "Jesper")
+        assertEquals(last, "Svensson")
+      case other => fail(s"Expected NoMatch, got $other")
+  }
+
+  test("abbreviated first name matches by last name") {
+    // "Jesper Svensson" in DB, ESPN sends "J. Svensson" — abbreviated
+    val svensson = golfer(8, "Jesper", "Svensson")
+    val golfers = List(scheffler, svensson)
+    val result = findGolferMatch("J. Svensson", "espn8", golfers)
+    result match
+      case GolferMatchResult.LastNameMatch(g) =>
+        assertEquals(g.id, svensson.id)
+      case other => fail(s"Expected LastNameMatch, got $other")
   }
 
   test("multi-word last name like Min Woo Lee: full name match") {

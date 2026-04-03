@@ -67,7 +67,9 @@ class EspnClient(httpClient: JHttpClient)(using LoggerFactory[IO]):
         .as[Boolean].getOrElse(false)
       competitorsJson <- event.hcursor.downField("competitions").downArray
         .downField("competitors").as[List[Json]].left.map(_.message)
-      competitors = competitorsJson.flatMap(parseCompetitor)
+      competitors = competitorsJson.zipWithIndex.flatMap((j, i) =>
+        parseCompetitor(j, i)
+      )
     yield EspnTournament(
       espnId = eventId,
       name = eventName,
@@ -75,11 +77,13 @@ class EspnClient(httpClient: JHttpClient)(using LoggerFactory[IO]):
       competitors = assignPositions(competitors)
     )
 
-  private def parseCompetitor(json: Json): Option[EspnCompetitor] =
+  /** Parse a single competitor from ESPN JSON.
+    * Falls back to list index for `order` when ESPN omits it. */
+  private def parseCompetitor(json: Json, index: Int): Option[EspnCompetitor] =
     val c = json.hcursor
     for
       athleteId <- c.downField("id").as[String].toOption
-      order <- c.downField("order").as[Int].toOption
+      order = c.downField("order").as[Int].getOrElse(index + 1)
       fullName <- c.downField("athlete").downField("displayName").as[String].toOption
       score = c.downField("score").as[String].toOption
       scoreToPar = score.flatMap: s =>

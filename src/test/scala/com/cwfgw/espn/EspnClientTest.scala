@@ -247,3 +247,33 @@ class EspnClientTest extends FunSuite:
     val result = client.parseLeaderboard(json)
     assert(result.isLeft)
   }
+
+  // ---- Missing order field fallback ----
+
+  test("competitor without order field uses list index as fallback") {
+    val noOrderJson = Json.obj(
+      "id" -> Json.fromString("99"),
+      "score" -> Json.fromString("-3"),
+      "athlete" -> Json.obj(
+        "displayName" -> Json.fromString("Adam Svensson")
+      ),
+      "linescores" -> Json.arr(
+        Json.obj("value" -> Json.fromDouble(70.0).get),
+        Json.obj("value" -> Json.fromDouble(69.0).get),
+        Json.obj("value" -> Json.fromDouble(71.0).get),
+        Json.obj("value" -> Json.fromDouble(68.0).get)
+      ),
+      "status" -> Json.obj(
+        "type" -> Json.obj("id" -> Json.fromString("1"))
+      )
+    )
+    val json = tournamentJson(competitors = List(
+      competitorJson("1", "Player A", 1, "-10"),
+      noOrderJson
+    ))
+    val t = client.parseLeaderboard(json).toOption.get
+    assertEquals(t.competitors.size, 2)
+    val svensson = t.competitors.find(_.name == "Adam Svensson").get
+    assertEquals(svensson.espnId, "99")
+    assertEquals(svensson.scoreToPar, Some(-3))
+  }
