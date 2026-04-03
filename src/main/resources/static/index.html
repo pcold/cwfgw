@@ -93,15 +93,18 @@
 
   <main class="max-w-6xl mx-auto px-4 py-6">
 
-    <!-- Tournament selector (scoreboard only) -->
-    <div class="mb-6 flex flex-wrap items-center gap-4" x-show="page === 'scoreboard'">
-      <select x-model="selectedTournament" @change="loadScoreboard()"
-              class="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm w-full sm:w-auto">
-        <template x-for="t in tournaments" :key="t.id">
-          <option :value="t.id" x-text="'Wk ' + (t.metadata?.week || '?') + ' — ' + t.name + (t.payout_multiplier != 1 ? ' (' + t.payout_multiplier + 'x)' : '') + ' — ' + t.status"></option>
-        </template>
-      </select>
-      <span class="text-xs text-gray-500" x-show="scoreboardLoading">Loading...</span>
+    <!-- Scoreboard header -->
+    <div class="mb-6 flex flex-wrap items-center justify-between gap-3" x-show="page === 'scoreboard'">
+      <h2 class="text-xl font-bold">Scoreboard</h2>
+      <div class="flex flex-wrap items-center gap-3">
+        <select x-model="selectedTournament" @change="loadScoreboard()"
+                class="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm">
+          <template x-for="t in tournaments" :key="t.id">
+            <option :value="t.id" x-text="'Wk ' + (t.metadata?.week || '?') + ' — ' + t.name + (t.payout_multiplier != 1 ? ' (' + t.payout_multiplier + 'x)' : '') + ' — ' + t.status"></option>
+          </template>
+        </select>
+        <span class="text-xs text-gray-500" x-show="scoreboardLoading">Loading...</span>
+      </div>
     </div>
 
     <!-- SCOREBOARD PAGE -->
@@ -534,11 +537,31 @@
                         x-text="fmtMoney(team.side_bets)"></td>
                     <td class="px-4 py-3 text-right font-mono font-bold"
                         :class="team.total_cash > 0 ? 'text-green-400' : team.total_cash < 0 ? 'text-red-400' : 'text-gray-400'"
-                        x-text="fmtMoney(team.total_cash)"></td>
+                        x-text="fmtMoney(team.total_cash, 0)"></td>
                   </tr>
                 </template>
               </tbody>
             </table>
+          </div>
+
+          <!-- Zero-sum breakdown -->
+          <div class="mt-4 mb-6 flex flex-wrap gap-4 text-sm"
+               x-data="{
+                 get totalWon() { return (rankings?.teams || []).filter(t => t.total_cash > 0).reduce((s, t) => s + Number(t.total_cash), 0) },
+                 get totalLost() { return (rankings?.teams || []).filter(t => t.total_cash < 0).reduce((s, t) => s + Number(t.total_cash), 0) }
+               }">
+            <div class="bg-gray-800 rounded-lg px-4 py-2 flex items-center gap-2">
+              <span class="text-gray-400">Won:</span>
+              <span class="font-mono font-bold text-green-400" x-text="fmtMoney(totalWon, 0)"></span>
+            </div>
+            <div class="bg-gray-800 rounded-lg px-4 py-2 flex items-center gap-2">
+              <span class="text-gray-400">Lost:</span>
+              <span class="font-mono font-bold text-red-400" x-text="fmtMoney(totalLost, 0)"></span>
+            </div>
+            <div class="bg-gray-800 rounded-lg px-4 py-2 flex items-center gap-2">
+              <span class="text-gray-400">Net:</span>
+              <span class="font-mono font-bold text-gray-400" x-text="fmtMoney(totalWon + totalLost, 0)"></span>
+            </div>
           </div>
 
           <!-- Chart -->
