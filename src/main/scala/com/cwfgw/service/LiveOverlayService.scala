@@ -238,8 +238,10 @@ class LiveOverlayService(
       }
 
       val sideBetPerTeam = rules.sideBetAmount
-      val updatedSideBetDetail = updateSideBetDetail(
-        report.sideBetDetail, updatedTeams, golferPayouts, numTeams, sideBetPerTeam
+      val updatedSideBetDetail = updateSideBetDetailWith(
+        report.sideBetDetail, updatedTeams,
+        (tid, gid) => golferPayouts.get((tid, gid)).map(_._1).getOrElse(BigDecimal(0)),
+        numTeams, sideBetPerTeam
       )
 
       val sideBetTotals = aggregateSideBetTotals(updatedSideBetDetail)
@@ -313,8 +315,10 @@ class LiveOverlayService(
 
         // Recompute side bets with live data
         val sideBetPerTeam = rules.sideBetAmount
-        val liveSideBetDetail = updateSideBetDetailFromPhase1(
-          report.sideBetDetail, phase1Teams.map(_._1), livePayout, numTeams, sideBetPerTeam
+        val liveSideBetDetail = updateSideBetDetailWith(
+          report.sideBetDetail, phase1Teams.map(_._1),
+          (tid, gid) => livePayout.get((tid, gid)).map(_._1).getOrElse(BigDecimal(0)),
+          numTeams, sideBetPerTeam
         )
 
         val liveSideBetTotals = aggregateSideBetTotals(liveSideBetDetail)
@@ -374,11 +378,13 @@ class LiveOverlayService(
   // Internal helpers to reduce duplication
   // --------------------------------------------------
 
-  /** Update side bet detail entries with live golfer earnings from a golfer payouts map. */
-  private def updateSideBetDetail(
+  /** Update side bet detail entries with live golfer earnings. The earningsLookup function resolves a
+    * (teamId, golferId) pair to the live earnings amount.
+    */
+  private def updateSideBetDetailWith(
     sideBetDetail: List[ReportSideBetRound],
     teams: List[ReportTeamColumn],
-    golferPayouts: Map[(UUID, UUID), (BigDecimal, Int)],
+    earningsLookup: (UUID, UUID) => BigDecimal,
     numTeams: Int,
     sideBetPerTeam: BigDecimal
   ): List[ReportSideBetRound] =
@@ -387,35 +393,7 @@ class LiveOverlayService(
         val gidOpt = teams
           .find(_.teamId == entry.teamId)
           .flatMap(_.rows.find(_.round == rd.round).flatMap(_.golferId))
-        val liveEarnings = gidOpt
-          .flatMap(gid => golferPayouts.get((entry.teamId, gid)))
-          .map(_._1).getOrElse(BigDecimal(0))
-        val ownershipPct = teams
-          .find(_.teamId == entry.teamId)
-          .flatMap(_.rows.find(_.round == rd.round).map(_.ownershipPct))
-          .getOrElse(BigDecimal(100))
-        val adjusted = liveEarnings * ownershipPct / 100
-        entry.copy(cumulativeEarnings = entry.cumulativeEarnings + adjusted)
-      }
-      rd.copy(teams = recomputeSideBetPayouts(updatedEntries, numTeams, sideBetPerTeam))
-    }
-
-  /** Update side bet detail from phase1 teams using a 3-tuple livePayout map. */
-  private def updateSideBetDetailFromPhase1(
-    sideBetDetail: List[ReportSideBetRound],
-    teams: List[ReportTeamColumn],
-    livePayout: Map[(UUID, UUID), (BigDecimal, Int, Option[Int])],
-    numTeams: Int,
-    sideBetPerTeam: BigDecimal
-  ): List[ReportSideBetRound] =
-    sideBetDetail.map { rd =>
-      val updatedEntries = rd.teams.map { entry =>
-        val gidOpt = teams
-          .find(_.teamId == entry.teamId)
-          .flatMap(_.rows.find(_.round == rd.round).flatMap(_.golferId))
-        val liveEarnings = gidOpt
-          .flatMap(gid => livePayout.get((entry.teamId, gid)))
-          .map(_._1).getOrElse(BigDecimal(0))
+        val liveEarnings = gidOpt.map(gid => earningsLookup(entry.teamId, gid)).getOrElse(BigDecimal(0))
         val ownershipPct = teams
           .find(_.teamId == entry.teamId)
           .flatMap(_.rows.find(_.round == rd.round).map(_.ownershipPct))
