@@ -55,8 +55,7 @@ class ScoringService(xa: Transactor[IO]):
                           val splits = PayoutTable.splitOwnership(basePayout, owners)
                           val ownerPayout = splits.getOrElse(team.id, basePayout)
                           val bd = ScoreBreakdown(pos, numTied, basePayout, entry.ownershipPct, ownerPayout, multiplier)
-                          ScoreRepository
-                            .upsertScore(seasonId, team.id, tournamentId, entry.golferId, ownerPayout, bd)
+                          ScoreRepository.upsertScore(seasonId, team.id, tournamentId, entry.golferId, ownerPayout, bd)
                             .map(_ => Some(GolferScoreEntry(entry.golferId, ownerPayout, bd)))
                 }
               yield (team, golferScores.flatten, roster)
@@ -149,8 +148,7 @@ class ScoringService(xa: Transactor[IO]):
       val numTied = allResults.count(_.position == Some(pos))
       val basePayout = PayoutTable.tieSplitPayout(pos, numTied, multiplier, rules)
       val ownerPayout = teamId match
-        case Some(tid) if owners.size > 1 =>
-          PayoutTable.splitOwnership(basePayout, owners).getOrElse(tid, basePayout)
+        case Some(tid) if owners.size > 1 => PayoutTable.splitOwnership(basePayout, owners).getOrElse(tid, basePayout)
         case _ => basePayout * ownershipPct / BigDecimal(100)
       val breakdown = ScoreBreakdown(pos, numTied, basePayout, ownershipPct, ownerPayout, multiplier)
       Some((basePayout, ownerPayout, breakdown))

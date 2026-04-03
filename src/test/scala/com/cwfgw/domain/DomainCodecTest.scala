@@ -44,7 +44,19 @@ class DomainCodecTest extends FunSuite:
   // ================================================================
 
   test("Season encodes to snake_case JSON") {
-    val season = Season(sampleId, sampleId, "Season 1", 2026, 1, "active", BigDecimal(1), BigDecimal(15), 13, sampleInstant, sampleInstant)
+    val season = Season(
+      sampleId,
+      sampleId,
+      "Season 1",
+      2026,
+      1,
+      "active",
+      BigDecimal(1),
+      BigDecimal(15),
+      13,
+      sampleInstant,
+      sampleInstant
+    )
     val json = season.asJson
     assert(json.hcursor.downField("league_id").as[String].isRight)
     assert(json.hcursor.downField("season_year").as[Int].isRight)
@@ -58,7 +70,19 @@ class DomainCodecTest extends FunSuite:
   }
 
   test("Season round-trips through JSON") {
-    val season = Season(sampleId, sampleId, "Season 1", 2026, 1, "active", BigDecimal(1), BigDecimal(15), 13, sampleInstant, sampleInstant)
+    val season = Season(
+      sampleId,
+      sampleId,
+      "Season 1",
+      2026,
+      1,
+      "active",
+      BigDecimal(1),
+      BigDecimal(15),
+      13,
+      sampleInstant,
+      sampleInstant
+    )
     val decoded = decode[Season](season.asJson.noSpaces)
     assertEquals(decoded, Right(season))
   }
@@ -90,8 +114,7 @@ class DomainCodecTest extends FunSuite:
   // ================================================================
 
   test("Golfer encodes with snake_case fields") {
-    val golfer =
-      Golfer(sampleId, Some("12345"), "Scottie", "Scheffler", Some("USA"), Some(1), true, sampleInstant)
+    val golfer = Golfer(sampleId, Some("12345"), "Scottie", "Scheffler", Some("USA"), Some(1), true, sampleInstant)
     val json = golfer.asJson
     assert(json.hcursor.downField("pga_player_id").as[String].isRight)
     assert(json.hcursor.downField("first_name").as[String].isRight)
@@ -101,8 +124,7 @@ class DomainCodecTest extends FunSuite:
   }
 
   test("Golfer round-trips through JSON") {
-    val golfer =
-      Golfer(sampleId, Some("12345"), "Scottie", "Scheffler", Some("USA"), Some(1), true, sampleInstant)
+    val golfer = Golfer(sampleId, Some("12345"), "Scottie", "Scheffler", Some("USA"), Some(1), true, sampleInstant)
     val decoded = decode[Golfer](golfer.asJson.noSpaces)
     assertEquals(decoded, Right(golfer))
   }
@@ -188,7 +210,10 @@ class DomainCodecTest extends FunSuite:
       Some(-10),
       Some(270),
       Some(3600000L),
-      Some(68), Some(67), Some(66), Some(69),
+      Some(68),
+      Some(67),
+      Some(66),
+      Some(69),
       true
     )
     val decoded = decode[TournamentResult](tr.asJson.noSpaces)
@@ -278,8 +303,18 @@ class DomainCodecTest extends FunSuite:
 
   test("FantasyScore round-trips through JSON") {
     val score = FantasyScore(
-      sampleId, sampleId, sampleId, sampleId, sampleId,
-      BigDecimal("18.50"), 1, 1, BigDecimal(18), BigDecimal(100), BigDecimal("18.50"), BigDecimal(1),
+      sampleId,
+      sampleId,
+      sampleId,
+      sampleId,
+      sampleId,
+      BigDecimal("18.50"),
+      1,
+      1,
+      BigDecimal(18),
+      BigDecimal(100),
+      BigDecimal("18.50"),
+      BigDecimal(1),
       sampleInstant
     )
     val decoded = decode[FantasyScore](score.asJson.noSpaces)
@@ -288,8 +323,18 @@ class DomainCodecTest extends FunSuite:
 
   test("FantasyScore encodes with snake_case") {
     val score = FantasyScore(
-      sampleId, sampleId, sampleId, sampleId, sampleId,
-      BigDecimal(18), 1, 1, BigDecimal(18), BigDecimal(100), BigDecimal(18), BigDecimal(1),
+      sampleId,
+      sampleId,
+      sampleId,
+      sampleId,
+      sampleId,
+      BigDecimal(18),
+      1,
+      1,
+      BigDecimal(18),
+      BigDecimal(100),
+      BigDecimal(18),
+      BigDecimal(1),
       sampleInstant
     )
     val json = score.asJson
@@ -347,8 +392,18 @@ class DomainCodecTest extends FunSuite:
 
   test("BigDecimal precision preserved in FantasyScore") {
     val score = FantasyScore(
-      sampleId, sampleId, sampleId, sampleId, sampleId,
-      BigDecimal("7.333333333"), 5, 2, BigDecimal(14), BigDecimal(50), BigDecimal("7.333333333"), BigDecimal(1),
+      sampleId,
+      sampleId,
+      sampleId,
+      sampleId,
+      sampleId,
+      BigDecimal("7.333333333"),
+      5,
+      2,
+      BigDecimal(14),
+      BigDecimal(50),
+      BigDecimal("7.333333333"),
+      BigDecimal(1),
       sampleInstant
     )
     val decoded = decode[FantasyScore](score.asJson.noSpaces)

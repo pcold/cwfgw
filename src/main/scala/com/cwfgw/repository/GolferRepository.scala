@@ -8,8 +8,7 @@ import com.cwfgw.domain.*
 
 object GolferRepository:
 
-  private val selectCols =
-    fr"id, pga_player_id, first_name, last_name, country, world_ranking, active, updated_at"
+  private val selectCols = fr"id, pga_player_id, first_name, last_name, country, world_ranking, active, updated_at"
 
   def findAll(activeOnly: Boolean, search: Option[String]): ConnectionIO[List[Golfer]] =
     val base = fr"SELECT" ++ selectCols ++ fr"FROM golfers"

@@ -404,17 +404,11 @@ class ServiceCodecTest extends FunSuite:
   test("SideBetStandings round-trips") {
     val standings = SideBetStandings(
       List(SideBetRound(5, active = false, None, Nil)),
-      List(SideBetTeamTotal(
-        id1, "Team A", 0, BigDecimal(0)))
+      List(SideBetTeamTotal(id1, "Team A", 0, BigDecimal(0)))
     )
     val json = standings.asJson
-    assertEquals(
-      json.hcursor.downField("team_totals")
-        .as[List[SideBetTeamTotal]],
-      Right(standings.teamTotals))
-    assertEquals(
-      decode[SideBetStandings](json.noSpaces),
-      Right(standings))
+    assertEquals(json.hcursor.downField("team_totals").as[List[SideBetTeamTotal]], Right(standings.teamTotals))
+    assertEquals(decode[SideBetStandings](json.noSpaces), Right(standings))
   }
 
   // ==============================================================
@@ -423,130 +417,93 @@ class ServiceCodecTest extends FunSuite:
 
   test("ReportRow round-trips with populated fields") {
     val row = ReportRow(
-      1, Some("SCHEFFLER"), Some(id1),
-      Some("1"), Some("-12"),
-      BigDecimal(18), 1, BigDecimal(100),
-      BigDecimal(36), 2
+      1,
+      Some("SCHEFFLER"),
+      Some(id1),
+      Some("1"),
+      Some("-12"),
+      BigDecimal(18),
+      1,
+      BigDecimal(100),
+      BigDecimal(36),
+      2
     )
     val json = row.asJson
-    assertEquals(
-      json.hcursor.downField("golfer_name")
-        .as[Option[String]],
-      Right(Some("SCHEFFLER")))
-    assertEquals(
-      json.hcursor.downField("position_str")
-        .as[Option[String]],
-      Right(Some("1")))
-    assertEquals(
-      json.hcursor.downField("season_earnings")
-        .as[BigDecimal],
-      Right(BigDecimal(36)))
-    assertEquals(
-      decode[ReportRow](json.noSpaces), Right(row))
+    assertEquals(json.hcursor.downField("golfer_name").as[Option[String]], Right(Some("SCHEFFLER")))
+    assertEquals(json.hcursor.downField("position_str").as[Option[String]], Right(Some("1")))
+    assertEquals(json.hcursor.downField("season_earnings").as[BigDecimal], Right(BigDecimal(36)))
+    assertEquals(decode[ReportRow](json.noSpaces), Right(row))
   }
 
   test("ReportRow round-trips with empty slot") {
-    val row = ReportRow(
-      3, None, None, None, None,
-      BigDecimal(0), 0, BigDecimal(100),
-      BigDecimal(0), 0
-    )
+    val row = ReportRow(3, None, None, None, None, BigDecimal(0), 0, BigDecimal(100), BigDecimal(0), 0)
     val json = row.asJson
-    assertEquals(
-      json.hcursor.downField("golfer_name")
-        .as[Option[String]],
-      Right(None))
-    assertEquals(
-      decode[ReportRow](json.noSpaces), Right(row))
+    assertEquals(json.hcursor.downField("golfer_name").as[Option[String]], Right(None))
+    assertEquals(decode[ReportRow](json.noSpaces), Right(row))
   }
 
   test("ReportTeamColumn round-trips") {
     val col = ReportTeamColumn(
-      id1, "Team A", "Alice", Nil,
-      BigDecimal(18), BigDecimal(6),
-      BigDecimal(12), BigDecimal(18),
-      3, BigDecimal(36), BigDecimal(-15),
+      id1,
+      "Team A",
+      "Alice",
+      Nil,
+      BigDecimal(18),
+      BigDecimal(6),
+      BigDecimal(12),
+      BigDecimal(18),
+      3,
+      BigDecimal(36),
+      BigDecimal(-15),
       BigDecimal(3)
     )
     val json = col.asJson
-    assertEquals(
-      json.hcursor.downField("weekly_total")
-        .as[BigDecimal],
-      Right(BigDecimal(6)))
-    assertEquals(
-      json.hcursor.downField("top_ten_count").as[Int],
-      Right(3))
-    assertEquals(
-      json.hcursor.downField("total_cash")
-        .as[BigDecimal],
-      Right(BigDecimal(3)))
-    assertEquals(
-      decode[ReportTeamColumn](json.noSpaces), Right(col))
+    assertEquals(json.hcursor.downField("weekly_total").as[BigDecimal], Right(BigDecimal(6)))
+    assertEquals(json.hcursor.downField("top_ten_count").as[Int], Right(3))
+    assertEquals(json.hcursor.downField("total_cash").as[BigDecimal], Right(BigDecimal(3)))
+    assertEquals(decode[ReportTeamColumn](json.noSpaces), Right(col))
   }
 
   test("UndraftedGolfer round-trips") {
-    val g = UndraftedGolfer(
-      "T. Woods", Some(5), BigDecimal(7), Some("-8")
-    )
+    val g = UndraftedGolfer("T. Woods", Some(5), BigDecimal(7), Some("-8"))
     val json = g.asJson
-    assertEquals(
-      json.hcursor.downField("score_to_par")
-        .as[Option[String]],
-      Right(Some("-8")))
-    assertEquals(
-      decode[UndraftedGolfer](json.noSpaces), Right(g))
+    assertEquals(json.hcursor.downField("score_to_par").as[Option[String]], Right(Some("-8")))
+    assertEquals(decode[UndraftedGolfer](json.noSpaces), Right(g))
   }
 
   test("ReportSideBetRound round-trips") {
-    val round = ReportSideBetRound(
-      5,
-      List(ReportSideBetTeamEntry(
-        id1, "SCHEFFLER", BigDecimal(50),
-        BigDecimal(180)))
-    )
+    val round = ReportSideBetRound(5, List(ReportSideBetTeamEntry(id1, "SCHEFFLER", BigDecimal(50), BigDecimal(180))))
     val json = round.asJson
-    assertEquals(
-      json.hcursor.downField("round").as[Int], Right(5))
-    assertEquals(
-      decode[ReportSideBetRound](json.noSpaces),
-      Right(round))
+    assertEquals(json.hcursor.downField("round").as[Int], Right(5))
+    assertEquals(decode[ReportSideBetRound](json.noSpaces), Right(round))
   }
 
   test("StandingsEntry round-trips") {
     val e = StandingsEntry(1, "Team A", BigDecimal(42))
     val json = e.asJson
-    assertEquals(
-      json.hcursor.downField("rank").as[Int], Right(1))
-    assertEquals(
-      json.hcursor.downField("total_cash")
-        .as[BigDecimal],
-      Right(BigDecimal(42)))
-    assertEquals(
-      decode[StandingsEntry](json.noSpaces), Right(e))
+    assertEquals(json.hcursor.downField("rank").as[Int], Right(1))
+    assertEquals(json.hcursor.downField("total_cash").as[BigDecimal], Right(BigDecimal(42)))
+    assertEquals(decode[StandingsEntry](json.noSpaces), Right(e))
   }
 
   test("ReportTournamentInfo round-trips") {
     val info = ReportTournamentInfo(
-      Some(id1), Some("The Masters"),
-      Some("2026-04-09"), Some("2026-04-12"),
-      Some("completed"), BigDecimal(2), Some("8")
+      Some(id1),
+      Some("The Masters"),
+      Some("2026-04-09"),
+      Some("2026-04-12"),
+      Some("completed"),
+      BigDecimal(2),
+      Some("8")
     )
     val json = info.asJson
-    assertEquals(
-      json.hcursor.downField("payout_multiplier")
-        .as[BigDecimal],
-      Right(BigDecimal(2)))
-    assertEquals(
-      decode[ReportTournamentInfo](json.noSpaces),
-      Right(info))
+    assertEquals(json.hcursor.downField("payout_multiplier").as[BigDecimal], Right(BigDecimal(2)))
+    assertEquals(decode[ReportTournamentInfo](json.noSpaces), Right(info))
   }
 
   test("WeeklyReport round-trips") {
     val report = WeeklyReport(
-      tournament = ReportTournamentInfo(
-        None, Some("All Tournaments"),
-        None, None, Some("season"),
-        BigDecimal(1), None),
+      tournament = ReportTournamentInfo(None, Some("All Tournaments"), None, None, Some("season"), BigDecimal(1), None),
       teams = Nil,
       undraftedTopTens = Nil,
       sideBetDetail = Nil,
@@ -554,75 +511,45 @@ class ServiceCodecTest extends FunSuite:
       live = Some(true)
     )
     val json = report.asJson
-    assertEquals(
-      json.hcursor.downField("live").as[Option[Boolean]],
-      Right(Some(true)))
-    assertEquals(
-      decode[WeeklyReport](json.noSpaces), Right(report))
+    assertEquals(json.hcursor.downField("live").as[Option[Boolean]], Right(Some(true)))
+    assertEquals(decode[WeeklyReport](json.noSpaces), Right(report))
   }
 
   test("TeamRanking round-trips") {
     val tr = TeamRanking(
-      id1, "Team A", BigDecimal(50),
-      BigDecimal(-15), BigDecimal(35),
+      id1,
+      "Team A",
+      BigDecimal(50),
+      BigDecimal(-15),
+      BigDecimal(35),
       List(BigDecimal(10), BigDecimal(35)),
       liveWeekly = Some(BigDecimal(12))
     )
     val json = tr.asJson
-    assertEquals(
-      json.hcursor.downField("series")
-        .as[List[BigDecimal]],
-      Right(List(BigDecimal(10), BigDecimal(35))))
-    assertEquals(
-      json.hcursor.downField("live_weekly")
-        .as[Option[BigDecimal]],
-      Right(Some(BigDecimal(12))))
-    assertEquals(
-      decode[TeamRanking](json.noSpaces), Right(tr))
+    assertEquals(json.hcursor.downField("series").as[List[BigDecimal]], Right(List(BigDecimal(10), BigDecimal(35))))
+    assertEquals(json.hcursor.downField("live_weekly").as[Option[BigDecimal]], Right(Some(BigDecimal(12))))
+    assertEquals(decode[TeamRanking](json.noSpaces), Right(tr))
   }
 
   test("Rankings round-trips") {
-    val rankings = Rankings(
-      teams = Nil,
-      weeks = List("1", "2"),
-      tournamentNames = List("Open", "Masters"),
-      live = None
-    )
+    val rankings = Rankings(teams = Nil, weeks = List("1", "2"), tournamentNames = List("Open", "Masters"), live = None)
     val json = rankings.asJson
-    assertEquals(
-      json.hcursor.downField("tournament_names")
-        .as[List[String]],
-      Right(List("Open", "Masters")))
-    assertEquals(
-      decode[Rankings](json.noSpaces), Right(rankings))
+    assertEquals(json.hcursor.downField("tournament_names").as[List[String]], Right(List("Open", "Masters")))
+    assertEquals(decode[Rankings](json.noSpaces), Right(rankings))
   }
 
   test("GolferHistoryEntry round-trips") {
-    val e = GolferHistoryEntry(
-      "The Open", 3, BigDecimal(10)
-    )
+    val e = GolferHistoryEntry("The Open", 3, BigDecimal(10))
     val json = e.asJson
-    assertEquals(
-      json.hcursor.downField("tournament").as[String],
-      Right("The Open"))
-    assertEquals(
-      decode[GolferHistoryEntry](json.noSpaces), Right(e))
+    assertEquals(json.hcursor.downField("tournament").as[String], Right("The Open"))
+    assertEquals(decode[GolferHistoryEntry](json.noSpaces), Right(e))
   }
 
   test("GolferHistory round-trips") {
-    val history = GolferHistory(
-      "Scottie Scheffler", id1,
-      BigDecimal(50), 3,
-      List(GolferHistoryEntry(
-        "Masters", 1, BigDecimal(36)))
-    )
+    val history =
+      GolferHistory("Scottie Scheffler", id1, BigDecimal(50), 3, List(GolferHistoryEntry("Masters", 1, BigDecimal(36))))
     val json = history.asJson
-    assertEquals(
-      json.hcursor.downField("golfer_name").as[String],
-      Right("Scottie Scheffler"))
-    assertEquals(
-      json.hcursor.downField("top_tens").as[Int],
-      Right(3))
-    assertEquals(
-      decode[GolferHistory](json.noSpaces), Right(history))
+    assertEquals(json.hcursor.downField("golfer_name").as[String], Right("Scottie Scheffler"))
+    assertEquals(json.hcursor.downField("top_tens").as[Int], Right(3))
+    assertEquals(decode[GolferHistory](json.noSpaces), Right(history))
   }

@@ -9,8 +9,8 @@ import java.util.UUID
 import java.time.{Instant, LocalDate}
 import com.cwfgw.domain.*
 
-/** Tests for the pure builder methods in WeeklyReportService.
-  * These methods operate on domain objects with no I/O or DB access.
+/** Tests for the pure builder methods in WeeklyReportService. These methods operate on domain objects with no I/O or DB
+  * access.
   */
 class WeeklyReportBuilderTest extends FunSuite:
 
@@ -35,8 +35,7 @@ class WeeklyReportBuilderTest extends FunSuite:
 
   // ---- Test data builders ----
 
-  private def mkTeam(id: UUID, name: String): Team =
-    Team(id, seasonId, s"Owner of $name", name, None, now, now)
+  private def mkTeam(id: UUID, name: String): Team = Team(id, seasonId, s"Owner of $name", name, None, now, now)
 
   private def mkGolfer(id: UUID, first: String, last: String): Golfer =
     Golfer(id, None, first, last, None, None, active = true, now)
@@ -49,21 +48,36 @@ class WeeklyReportBuilderTest extends FunSuite:
     position: Option[Int],
     scoreToPar: Option[Int] = None,
     tId: UUID = tournamentId
-  ): TournamentResult =
-    TournamentResult(
-      UUID.randomUUID(), tId, golferId, position, scoreToPar,
-      None, None, None, None, None, None, madeCut = position.isDefined
-    )
+  ): TournamentResult = TournamentResult(
+    UUID.randomUUID(),
+    tId,
+    golferId,
+    position,
+    scoreToPar,
+    None,
+    None,
+    None,
+    None,
+    None,
+    None,
+    madeCut = position.isDefined
+  )
 
-  private def mkScore(
-    teamId: UUID,
-    golferId: UUID,
-    points: BigDecimal,
-    tId: UUID = tournamentId
-  ): FantasyScore =
+  private def mkScore(teamId: UUID, golferId: UUID, points: BigDecimal, tId: UUID = tournamentId): FantasyScore =
     FantasyScore(
-      UUID.randomUUID(), seasonId, teamId, tId, golferId,
-      points, 1, 1, points, BigDecimal(100), points, BigDecimal(1), now
+      UUID.randomUUID(),
+      seasonId,
+      teamId,
+      tId,
+      golferId,
+      points,
+      1,
+      1,
+      points,
+      BigDecimal(100),
+      points,
+      BigDecimal(1),
+      now
     )
 
   private def mkTournament(
@@ -71,11 +85,20 @@ class WeeklyReportBuilderTest extends FunSuite:
     date: String,
     id: UUID = UUID.randomUUID(),
     multiplier: BigDecimal = BigDecimal(1)
-  ): Tournament =
-    Tournament(
-      id, None, name, seasonId, LocalDate.parse(date), LocalDate.parse(date),
-      None, "completed", None, multiplier, Some(name), now
-    )
+  ): Tournament = Tournament(
+    id,
+    None,
+    name,
+    seasonId,
+    LocalDate.parse(date),
+    LocalDate.parse(date),
+    None,
+    "completed",
+    None,
+    multiplier,
+    Some(name),
+    now
+  )
 
   private val teamA = mkTeam(teamAId, "Team A")
   private val teamB = mkTeam(teamBId, "Team B")
@@ -87,10 +110,8 @@ class WeeklyReportBuilderTest extends FunSuite:
   private val golfer3 = mkGolfer(golfer3Id, "Jon", "Rahm")
   private val golfer4 = mkGolfer(golfer4Id, "Scottie", "Scheffler")
   private val golfer5 = mkGolfer(golfer5Id, "Collin", "Morikawa")
-  private val golferMap = Map(
-    golfer1Id -> golfer1, golfer2Id -> golfer2, golfer3Id -> golfer3,
-    golfer4Id -> golfer4, golfer5Id -> golfer5
-  )
+  private val golferMap =
+    Map(golfer1Id -> golfer1, golfer2Id -> golfer2, golfer3Id -> golfer3, golfer4Id -> golfer4, golfer5Id -> golfer5)
 
   // ================================================================
   // buildTournamentInfo
@@ -147,7 +168,8 @@ class WeeklyReportBuilderTest extends FunSuite:
     val score = mkScore(teamAId, golfer1Id, BigDecimal(10))
 
     val rows = service.buildWeeklyRows(
-      roster, golferMap,
+      roster,
+      golferMap,
       resultsByGolfer = Map(golfer1Id -> result),
       allResults = List(result),
       scoresByTeamGolfer = Map((teamAId, golfer1Id) -> score),
@@ -170,7 +192,8 @@ class WeeklyReportBuilderTest extends FunSuite:
     val roster = List(mkRoster(teamAId, golfer1Id, round = 1))
 
     val rows = service.buildWeeklyRows(
-      roster, golferMap,
+      roster,
+      golferMap,
       resultsByGolfer = Map(golfer1Id -> result1),
       allResults = List(result1, result2),
       scoresByTeamGolfer = Map.empty,
@@ -183,9 +206,7 @@ class WeeklyReportBuilderTest extends FunSuite:
 
   test("buildWeeklyRows: unrostered round is empty") {
     val roster = List(mkRoster(teamAId, golfer1Id, round = 3))
-    val rows = service.buildWeeklyRows(
-      roster, golferMap, Map.empty, Nil, Map.empty, Map.empty, teamAId
-    )
+    val rows = service.buildWeeklyRows(roster, golferMap, Map.empty, Nil, Map.empty, Map.empty, teamAId)
 
     val row1 = rows.find(_.round == 1).get
     assertEquals(row1.golferName, None)
@@ -208,10 +229,8 @@ class WeeklyReportBuilderTest extends FunSuite:
     val t1 = mkTournament("Week 1", "2026-01-01")
     val current = mkTournament("Week 2", "2026-01-08")
 
-    val scores = List(
-      mkScore(teamAId, golfer1Id, BigDecimal(18), t1.id),
-      mkScore(teamBId, golfer2Id, BigDecimal(12), t1.id)
-    )
+    val scores =
+      List(mkScore(teamAId, golfer1Id, BigDecimal(18), t1.id), mkScore(teamBId, golfer2Id, BigDecimal(12), t1.id))
 
     val result = service.buildPriorWeekly(
       throughTournaments = List(t1, current),
@@ -262,10 +281,7 @@ class WeeklyReportBuilderTest extends FunSuite:
   }
 
   test("buildSideBetPerRound: all zero → no payouts") {
-    val rosters = List(
-      mkRoster(teamAId, golfer1Id, round = 5),
-      mkRoster(teamBId, golfer2Id, round = 5)
-    )
+    val rosters = List(mkRoster(teamAId, golfer1Id, round = 5), mkRoster(teamBId, golfer2Id, round = 5))
     // no scores → all zero
     val result = service.buildSideBetPerRound(rules, rosters, Nil, numTeams = 2, BigDecimal(15))
     val round5 = result.find(_._1 == 5).get
@@ -297,9 +313,7 @@ class WeeklyReportBuilderTest extends FunSuite:
 
   test("buildSideBetDetail: maps golfer names and earnings") {
     val rosters = List(mkRoster(teamAId, golfer1Id, round = 5))
-    val perRound = List(
-      (5, Map(teamAId -> BigDecimal(18)), Map(teamAId -> BigDecimal(30)))
-    )
+    val perRound = List((5, Map(teamAId -> BigDecimal(18)), Map(teamAId -> BigDecimal(30))))
 
     val detail = service.buildSideBetDetail(perRound, List(teamA), rosters, golferMap)
 
@@ -313,9 +327,7 @@ class WeeklyReportBuilderTest extends FunSuite:
 
   test("buildSideBetDetail: missing roster entry shows dash") {
     // no roster for round 5
-    val perRound = List(
-      (5, Map(teamAId -> BigDecimal(0)), Map.empty[UUID, BigDecimal])
-    )
+    val perRound = List((5, Map(teamAId -> BigDecimal(0)), Map.empty[UUID, BigDecimal]))
 
     val detail = service.buildSideBetDetail(perRound, List(teamA), Nil, golferMap)
     val entry = detail.head.teams.find(_.teamId == teamAId).get
@@ -334,9 +346,7 @@ class WeeklyReportBuilderTest extends FunSuite:
     )
     val rosteredIds = Set(golfer1Id) // golfer1 is rostered
 
-    val undrafted = service.buildUndraftedForTournament(
-      results, rosteredIds, golferMap, BigDecimal(1), rules
-    )
+    val undrafted = service.buildUndraftedForTournament(results, rosteredIds, golferMap, BigDecimal(1), rules)
 
     assertEquals(undrafted.size, 2)
     assert(!undrafted.exists(_.name.contains("Woods")))
@@ -344,14 +354,9 @@ class WeeklyReportBuilderTest extends FunSuite:
   }
 
   test("buildUndraftedForTournament: excludes positions > 10") {
-    val results = List(
-      mkResult(golfer1Id, position = Some(5)),
-      mkResult(golfer2Id, position = Some(11))
-    )
+    val results = List(mkResult(golfer1Id, position = Some(5)), mkResult(golfer2Id, position = Some(11)))
 
-    val undrafted = service.buildUndraftedForTournament(
-      results, Set.empty, golferMap, BigDecimal(1), rules
-    )
+    val undrafted = service.buildUndraftedForTournament(results, Set.empty, golferMap, BigDecimal(1), rules)
 
     assertEquals(undrafted.size, 1)
     assertEquals(undrafted.head.position, Some(5))
@@ -364,9 +369,7 @@ class WeeklyReportBuilderTest extends FunSuite:
       mkResult(golfer2Id, position = Some(5))
     )
 
-    val undrafted = service.buildUndraftedForTournament(
-      results, Set.empty, golferMap, BigDecimal(1), rules
-    )
+    val undrafted = service.buildUndraftedForTournament(results, Set.empty, golferMap, BigDecimal(1), rules)
 
     assertEquals(undrafted.map(_.position), List(Some(2), Some(5), Some(8)))
   }
@@ -385,9 +388,7 @@ class WeeklyReportBuilderTest extends FunSuite:
       mkResult(golfer2Id, position = Some(1), tId = t2.id)
     )
 
-    val undrafted = service.buildUndraftedAgg(
-      results, List(t1, t2), Set.empty, golferMap, rules
-    )
+    val undrafted = service.buildUndraftedAgg(results, List(t1, t2), Set.empty, golferMap, rules)
 
     // golfer1 has 2 top-10s, golfer2 has 1
     assertEquals(undrafted.size, 2)

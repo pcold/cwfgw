@@ -10,11 +10,9 @@ import io.circe.syntax.*
 /** Shared error response builder for route handlers. */
 object RouteHelpers:
 
-  def badRequest(message: String): IO[Response[IO]] =
-    BadRequest(Json.obj("error" -> message.asJson))
+  def badRequest(message: String): IO[Response[IO]] = BadRequest(Json.obj("error" -> message.asJson))
 
   def badRequestFromError(e: Throwable): IO[Response[IO]] =
     badRequest(Option(e.getMessage).getOrElse(e.getClass.getSimpleName))
 
-  def okMessage(message: String): IO[Response[IO]] =
-    Ok(Json.obj("message" -> message.asJson))
+  def okMessage(message: String): IO[Response[IO]] = Ok(Json.obj("message" -> message.asJson))

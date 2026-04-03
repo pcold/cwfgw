@@ -83,9 +83,7 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
         allGolfers <- GolferRepository.findAll(activeOnly = false, search = None)
         teams <- TeamRepository.findBySeason(seasonId)
         rosters <- TeamRepository.getRosterBySeason(seasonId)
-        tournamentRecords <- tournaments.traverse(espn =>
-          TournamentRepository.findIdAndMultiplier(espn.espnId)
-        )
+        tournamentRecords <- tournaments.traverse(espn => TournamentRepository.findIdAndMultiplier(espn.espnId))
       yield (seasonOpt, rulesOpt, allGolfers, teams, rosters, tournamentRecords)).transact(xa)
       (seasonOpt, rulesOpt, allGolfers, teams, rosters, tournamentRecords) = dbState
       rules = rulesOpt.getOrElse(SeasonRules.default)
@@ -195,15 +193,12 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
           case None =>
             // Try to find by name similarity (fallback)
             TournamentRepository.findFirstUnlinked.flatMap:
-              case Some(id) =>
-                TournamentRepository.linkPgaTournamentId(id, espn.espnId).as(id)
+              case Some(id) => TournamentRepository.linkPgaTournamentId(id, espn.espnId).as(id)
               case None => FC.raiseError[UUID](new RuntimeException(s"No tournament found for ESPN event '${espn
                     .name}' (${espn.espnId}). Create the tournament first."))
 
         // Update tournament status if completed
-        _ <-
-          if espn.completed then TournamentRepository.markCompleted(tournamentId)
-          else FC.pure(0)
+        _ <- if espn.completed then TournamentRepository.markCompleted(tournamentId) else FC.pure(0)
 
         // Load all golfers for name matching
         allGolfers <- GolferRepository.findAll(activeOnly = false, search = None)
@@ -269,10 +264,10 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
     GolferRepository.findIdByPgaPlayerId(competitor.espnId).flatMap:
       case Some(id) => FC.pure(Some((id, false)))
       case None => findGolferMatch(competitor.name, competitor.espnId, allGolfers) match
-          case GolferMatchResult.FullNameMatch(g) =>
-            GolferRepository.linkPgaPlayerId(g.id, competitor.espnId).as(Some((g.id, false)))
-          case GolferMatchResult.LastNameMatch(g) =>
-            GolferRepository.linkPgaPlayerId(g.id, competitor.espnId).as(Some((g.id, false)))
+          case GolferMatchResult.FullNameMatch(g) => GolferRepository.linkPgaPlayerId(g.id, competitor.espnId)
+              .as(Some((g.id, false)))
+          case GolferMatchResult.LastNameMatch(g) => GolferRepository.linkPgaPlayerId(g.id, competitor.espnId)
+              .as(Some((g.id, false)))
           case GolferMatchResult.NoMatch(first, last) => GolferRepository.create(CreateGolfer(
               pgaPlayerId = Some(competitor.espnId),
               firstName = first,
@@ -315,4 +310,3 @@ private[service] def findGolferMatch(
       byLastName match
         case g :: Nil if first.isEmpty || isAbbreviated => GolferMatchResult.LastNameMatch(g)
         case _ => GolferMatchResult.NoMatch(first, last)
-

@@ -15,8 +15,7 @@ object DraftRepository:
   def findBySeason(seasonId: UUID): ConnectionIO[Option[Draft]] =
     (fr"SELECT" ++ selectDraftCols ++ fr"FROM drafts WHERE season_id = $seasonId").query[Draft].option
 
-  def create(seasonId: UUID, req: CreateDraft): ConnectionIO[Draft] =
-    sql"""INSERT INTO drafts (season_id, draft_type)
+  def create(seasonId: UUID, req: CreateDraft): ConnectionIO[Draft] = sql"""INSERT INTO drafts (season_id, draft_type)
           VALUES ($seasonId, ${req.draftType.getOrElse("snake")})
           RETURNING $selectDraftCols""".query[Draft].unique
 

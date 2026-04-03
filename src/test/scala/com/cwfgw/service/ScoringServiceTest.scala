@@ -26,7 +26,10 @@ class ScoringServiceTest extends FunSuite:
     Some(-5),
     Some(270),
     None,
-    None, None, None, None,
+    None,
+    None,
+    None,
+    None,
     position.isDefined
   )
 

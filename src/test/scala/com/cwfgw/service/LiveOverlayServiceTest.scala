@@ -11,42 +11,26 @@ import java.time.{Instant, LocalDate}
 
 import com.cwfgw.domain.SeasonRules
 
-/** Tests for LiveOverlayService.mergeLiveData and
-  * overlayPriorLivePreview — pure typed transformations
-  * that overlay ESPN live data onto a base report.
+/** Tests for LiveOverlayService.mergeLiveData and overlayPriorLivePreview — pure typed transformations that overlay
+  * ESPN live data onto a base report.
   *
-  * We construct minimal WeeklyReport and EspnLivePreview
-  * objects, then verify the merged output has correct
-  * weekly totals, subtotals, and rankings.
+  * We construct minimal WeeklyReport and EspnLivePreview objects, then verify the merged output has correct weekly
+  * totals, subtotals, and rankings.
   */
 class LiveOverlayServiceTest extends FunSuite:
 
   private given LoggerFactory[IO] = NoOpFactory[IO]
 
-  private val service = new LiveOverlayService(
-    espnImportService = null
-  )
+  private val service = new LiveOverlayService(espnImportService = null)
 
   // ---- IDs ----
 
-  private val teamAId = UUID.fromString(
-    "00000000-0000-0000-0000-000000000001"
-  )
-  private val teamBId = UUID.fromString(
-    "00000000-0000-0000-0000-000000000002"
-  )
-  private val golfer1Id = UUID.fromString(
-    "00000000-0000-0000-0000-000000000011"
-  )
-  private val golfer2Id = UUID.fromString(
-    "00000000-0000-0000-0000-000000000012"
-  )
-  private val golfer3Id = UUID.fromString(
-    "00000000-0000-0000-0000-000000000013"
-  )
-  private val golfer4Id = UUID.fromString(
-    "00000000-0000-0000-0000-000000000014"
-  )
+  private val teamAId = UUID.fromString("00000000-0000-0000-0000-000000000001")
+  private val teamBId = UUID.fromString("00000000-0000-0000-0000-000000000002")
+  private val golfer1Id = UUID.fromString("00000000-0000-0000-0000-000000000011")
+  private val golfer2Id = UUID.fromString("00000000-0000-0000-0000-000000000012")
+  private val golfer3Id = UUID.fromString("00000000-0000-0000-0000-000000000013")
+  private val golfer4Id = UUID.fromString("00000000-0000-0000-0000-000000000014")
 
   // ---- Helpers ----
 
@@ -97,9 +81,7 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCash = previous + sideBets
     )
 
-  private def baseReport(
-    teams: List[ReportTeamColumn]
-  ): WeeklyReport = WeeklyReport(
+  private def baseReport(teams: List[ReportTeamColumn]): WeeklyReport = WeeklyReport(
     tournament = ReportTournamentInfo(
       id = None,
       name = Some("Test Open"),
@@ -124,34 +106,23 @@ class LiveOverlayServiceTest extends FunSuite:
     basePayout: BigDecimal,
     ownershipPct: BigDecimal,
     payout: BigDecimal
-  ): PreviewGolferScore = PreviewGolferScore(
-    golferName, golferId, position, numTied,
-    scoreToPar, basePayout, ownershipPct, payout
-  )
+  ): PreviewGolferScore =
+    PreviewGolferScore(golferName, golferId, position, numTied, scoreToPar, basePayout, ownershipPct, payout)
 
   // ---- Tests ----
 
-  test("mergeLiveData returns report unchanged " +
-    "when previews list is empty") {
+  test("mergeLiveData returns report unchanged " + "when previews list is empty") {
     val rows = List(baseRow(1, golfer1Id, "SCHEFFLER"))
-    val report = baseReport(List(
-      teamColumn(teamAId, "Team A", "Alice", rows)
-    ))
-    val result = service.mergeLiveData(
-      report, Nil, SeasonRules.default
-    )
+    val report = baseReport(List(teamColumn(teamAId, "Team A", "Alice", rows)))
+    val result = service.mergeLiveData(report, Nil, SeasonRules.default)
     assertEquals(result, report)
   }
 
-  test("mergeLiveData overlays earnings " +
-    "for matched golfers") {
+  test("mergeLiveData overlays earnings " + "for matched golfers") {
     val rows = List(baseRow(1, golfer1Id, "SCHEFFLER"))
     val report = baseReport(List(
       teamColumn(teamAId, "Team A", "Alice", rows),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY"))
-      )
+      teamColumn(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")))
     ))
 
     val preview = EspnLivePreview(
@@ -162,44 +133,31 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore(
-            "Scottie Scheffler", golfer1Id, 1, 1,
-            Some(-10), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)
-          ))
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
         ),
-        PreviewTeamScore(
-          teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil
-        )
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
 
-    val earnings =
-      result.teams.head.rows.head.earnings
+    val earnings = result.teams.head.rows.head.earnings
     assertEquals(earnings, BigDecimal(18))
 
     assert(result.live.contains(true))
   }
 
-  test("mergeLiveData computes zero-sum " +
-    "weekly totals correctly") {
+  test("mergeLiveData computes zero-sum " + "weekly totals correctly") {
     val report = baseReport(List(
-      teamColumn(
-        teamAId, "Team A", "Alice",
-        List(baseRow(1, golfer1Id, "SCHEFFLER"))
-      ),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY"))
-      )
+      teamColumn(teamAId, "Team A", "Alice", List(baseRow(1, golfer1Id, "SCHEFFLER"))),
+      teamColumn(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")))
     ))
 
     val preview = EspnLivePreview(
@@ -210,25 +168,20 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore(
-            "Scottie Scheffler", golfer1Id, 1, 1,
-            Some(-10), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)
-          ))
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
         ),
-        PreviewTeamScore(
-          teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil
-        )
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
     val weeklyA = result.teams(0).weeklyTotal
     val weeklyB = result.teams(1).weeklyTotal
 
@@ -237,19 +190,10 @@ class LiveOverlayServiceTest extends FunSuite:
     assertEquals(weeklyA + weeklyB, BigDecimal(0))
   }
 
-  test("mergeLiveData incorporates previous " +
-    "earnings into subtotal") {
+  test("mergeLiveData incorporates previous " + "earnings into subtotal") {
     val report = baseReport(List(
-      teamColumn(
-        teamAId, "Team A", "Alice",
-        List(baseRow(1, golfer1Id, "SCHEFFLER")),
-        previous = BigDecimal(50)
-      ),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY")),
-        previous = BigDecimal(30)
-      )
+      teamColumn(teamAId, "Team A", "Alice", List(baseRow(1, golfer1Id, "SCHEFFLER")), previous = BigDecimal(50)),
+      teamColumn(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")), previous = BigDecimal(30))
     ))
 
     val preview = EspnLivePreview(
@@ -260,25 +204,20 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(12),
-          List(golferScore(
-            "Scottie Scheffler", golfer1Id, 2, 1,
-            Some(-8), BigDecimal(12),
-            BigDecimal(100), BigDecimal(12)
-          ))
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 2, 1, Some(-8), BigDecimal(12), BigDecimal(100), BigDecimal(12))
+          )
         ),
-        PreviewTeamScore(
-          teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil
-        )
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
 
     // Team A: weekly=$12*2-$12=$12, subtotal=$50+$12=$62
     assertEquals(result.teams(0).subtotal, BigDecimal(62))
@@ -286,17 +225,20 @@ class LiveOverlayServiceTest extends FunSuite:
     assertEquals(result.teams(1).subtotal, BigDecimal(18))
   }
 
-  test("mergeLiveData includes side bets " +
-    "in total cash") {
+  test("mergeLiveData includes side bets " + "in total cash") {
     val report = baseReport(List(
       teamColumn(
-        teamAId, "Team A", "Alice",
+        teamAId,
+        "Team A",
+        "Alice",
         List(baseRow(1, golfer1Id, "SCHEFFLER")),
         previous = BigDecimal(50),
         sideBets = BigDecimal(20)
       ),
       teamColumn(
-        teamBId, "Team B", "Bob",
+        teamBId,
+        "Team B",
+        "Bob",
         List(baseRow(1, golfer2Id, "MCILROY")),
         previous = BigDecimal(30),
         sideBets = BigDecimal(-10)
@@ -310,45 +252,24 @@ class LiveOverlayServiceTest extends FunSuite:
       payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(
-          teamAId, "Team A", "Alice",
-          BigDecimal(0), Nil
-        ),
-        PreviewTeamScore(
-          teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil
-        )
+        PreviewTeamScore(teamAId, "Team A", "Alice", BigDecimal(0), Nil),
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
 
     // Team A: weekly=0, subtotal=50, total=50+20=70
-    assertEquals(
-      result.teams(0).totalCash, BigDecimal(70)
-    )
+    assertEquals(result.teams(0).totalCash, BigDecimal(70))
     // Team B: weekly=0, subtotal=30, total=30-10=20
-    assertEquals(
-      result.teams(1).totalCash, BigDecimal(20)
-    )
+    assertEquals(result.teams(1).totalCash, BigDecimal(20))
   }
 
-  test("mergeLiveData recomputes standings_order " +
-    "by total_cash descending") {
+  test("mergeLiveData recomputes standings_order " + "by total_cash descending") {
     val report = baseReport(List(
-      teamColumn(
-        teamAId, "Team A", "Alice",
-        List(baseRow(1, golfer1Id, "SCHEFFLER")),
-        previous = BigDecimal(10)
-      ),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY")),
-        previous = BigDecimal(100)
-      )
+      teamColumn(teamAId, "Team A", "Alice", List(baseRow(1, golfer1Id, "SCHEFFLER")), previous = BigDecimal(10)),
+      teamColumn(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")), previous = BigDecimal(100))
     ))
 
     val preview = EspnLivePreview(
@@ -358,41 +279,24 @@ class LiveOverlayServiceTest extends FunSuite:
       payoutMultiplier = BigDecimal(1),
       totalCompetitors = 100,
       teams = List(
-        PreviewTeamScore(
-          teamAId, "Team A", "Alice",
-          BigDecimal(0), Nil
-        ),
-        PreviewTeamScore(
-          teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil
-        )
+        PreviewTeamScore(teamAId, "Team A", "Alice", BigDecimal(0), Nil),
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
 
     // Team B has more totalCash, should be rank 1
-    assertEquals(
-      result.standingsOrder.head.teamName, "Team B"
-    )
+    assertEquals(result.standingsOrder.head.teamName, "Team B")
     assertEquals(result.standingsOrder.head.rank, 1)
   }
 
-  test("mergeLiveData zeroes earnings " +
-    "for unmatched golfers") {
-    val rows = List(
-      baseRow(1, golfer1Id, "SCHEFFLER"),
-      baseRow(2, golfer3Id, "NOBODY")
-    )
+  test("mergeLiveData zeroes earnings " + "for unmatched golfers") {
+    val rows = List(baseRow(1, golfer1Id, "SCHEFFLER"), baseRow(2, golfer3Id, "NOBODY"))
     val report = baseReport(List(
       teamColumn(teamAId, "Team A", "Alice", rows),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY"))
-      )
+      teamColumn(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")))
     ))
 
     val preview = EspnLivePreview(
@@ -403,42 +307,30 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore(
-            "Scottie Scheffler", golfer1Id, 1, 1,
-            Some(-10), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)
-          ))
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
         ),
-        PreviewTeamScore(
-          teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil
-        )
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
     val teamARows = result.teams(0).rows
 
     // golfer3Id (round 2) should have earnings = 0
     assertEquals(teamARows(1).earnings, BigDecimal(0))
   }
 
-  test("mergeLiveData sets position_str " +
-    "with T prefix for ties") {
+  test("mergeLiveData sets position_str " + "with T prefix for ties") {
     val report = baseReport(List(
-      teamColumn(
-        teamAId, "Team A", "Alice",
-        List(baseRow(1, golfer1Id, "SCHEFFLER"))
-      ),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY"))
-      )
+      teamColumn(teamAId, "Team A", "Alice", List(baseRow(1, golfer1Id, "SCHEFFLER"))),
+      teamColumn(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")))
     ))
 
     // Both golfers at position 3 (tied)
@@ -450,47 +342,36 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(10),
-          List(golferScore(
-            "Scottie Scheffler", golfer1Id, 3, 2,
-            Some(-5), BigDecimal(10),
-            BigDecimal(100), BigDecimal(10)
-          ))
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 3, 2, Some(-5), BigDecimal(10), BigDecimal(100), BigDecimal(10))
+          )
         ),
         PreviewTeamScore(
-          teamBId, "Team B", "Bob",
+          teamBId,
+          "Team B",
+          "Bob",
           BigDecimal(10),
-          List(golferScore(
-            "Rory McIlroy", golfer2Id, 3, 2,
-            Some(-5), BigDecimal(10),
-            BigDecimal(100), BigDecimal(10)
-          ))
+          List(golferScore("Rory McIlroy", golfer2Id, 3, 2, Some(-5), BigDecimal(10), BigDecimal(100), BigDecimal(10)))
         )
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
     val posStr = result.teams(0).rows.head.positionStr
 
     // Two golfers at position 3 => T3
     assertEquals(posStr, Some("T3"))
   }
 
-  test("mergeLiveData sets position_str " +
-    "without T prefix for solo position") {
+  test("mergeLiveData sets position_str " + "without T prefix for solo position") {
     val report = baseReport(List(
-      teamColumn(
-        teamAId, "Team A", "Alice",
-        List(baseRow(1, golfer1Id, "SCHEFFLER"))
-      ),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY"))
-      )
+      teamColumn(teamAId, "Team A", "Alice", List(baseRow(1, golfer1Id, "SCHEFFLER"))),
+      teamColumn(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")))
     ))
 
     val preview = EspnLivePreview(
@@ -501,46 +382,35 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore(
-            "Scottie Scheffler", golfer1Id, 1, 1,
-            Some(-12), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)
-          ))
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-12), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
         ),
         PreviewTeamScore(
-          teamBId, "Team B", "Bob",
+          teamBId,
+          "Team B",
+          "Bob",
           BigDecimal(12),
-          List(golferScore(
-            "Rory McIlroy", golfer2Id, 2, 1,
-            Some(-10), BigDecimal(12),
-            BigDecimal(100), BigDecimal(12)
-          ))
+          List(golferScore("Rory McIlroy", golfer2Id, 2, 1, Some(-10), BigDecimal(12), BigDecimal(100), BigDecimal(12)))
         )
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
     val posStr = result.teams(0).rows.head.positionStr
     assertEquals(posStr, Some("1"))
   }
 
-  test("mergeLiveData handles partial " +
-    "ownership correctly") {
-    val row = baseRow(
-      1, golfer1Id, "SCHEFFLER",
-      ownershipPct = BigDecimal(75)
-    )
+  test("mergeLiveData handles partial " + "ownership correctly") {
+    val row = baseRow(1, golfer1Id, "SCHEFFLER", ownershipPct = BigDecimal(75))
     val report = baseReport(List(
       teamColumn(teamAId, "Team A", "Alice", List(row)),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY"))
-      )
+      teamColumn(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")))
     ))
 
     // golfer1 earns $18 but Team A only owns 75%
@@ -552,41 +422,36 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal("13.5"),
           List(golferScore(
-            "Scottie Scheffler", golfer1Id, 1, 1,
-            Some(-10), BigDecimal(18),
-            BigDecimal(75), BigDecimal("13.5")
+            "Scottie Scheffler",
+            golfer1Id,
+            1,
+            1,
+            Some(-10),
+            BigDecimal(18),
+            BigDecimal(75),
+            BigDecimal("13.5")
           ))
         ),
-        PreviewTeamScore(
-          teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil
-        )
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
     val earnings = result.teams(0).rows.head.earnings
     assertEquals(earnings, BigDecimal("13.5"))
   }
 
-  test("mergeLiveData with multiple golfers " +
-    "on same team") {
-    val rows = List(
-      baseRow(1, golfer1Id, "SCHEFFLER"),
-      baseRow(2, golfer2Id, "MCILROY")
-    )
+  test("mergeLiveData with multiple golfers " + "on same team") {
+    val rows = List(baseRow(1, golfer1Id, "SCHEFFLER"), baseRow(2, golfer2Id, "MCILROY"))
     val report = baseReport(List(
       teamColumn(teamAId, "Team A", "Alice", rows),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer3Id, "RAHM"))
-      )
+      teamColumn(teamBId, "Team B", "Bob", List(baseRow(1, golfer3Id, "RAHM")))
     ))
 
     val preview = EspnLivePreview(
@@ -597,32 +462,21 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(30),
           List(
-            golferScore(
-              "Scottie Scheffler", golfer1Id, 1, 1,
-              Some(-12), BigDecimal(18),
-              BigDecimal(100), BigDecimal(18)
-            ),
-            golferScore(
-              "Rory McIlroy", golfer2Id, 2, 1,
-              Some(-10), BigDecimal(12),
-              BigDecimal(100), BigDecimal(12)
-            )
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-12), BigDecimal(18), BigDecimal(100), BigDecimal(18)),
+            golferScore("Rory McIlroy", golfer2Id, 2, 1, Some(-10), BigDecimal(12), BigDecimal(100), BigDecimal(12))
           )
         ),
-        PreviewTeamScore(
-          teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil
-        )
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
     val topTens = result.teams(0).topTens
     assertEquals(topTens, BigDecimal(30))
 
@@ -634,24 +488,12 @@ class LiveOverlayServiceTest extends FunSuite:
     assertEquals(weeklyA + weeklyB, BigDecimal(0))
   }
 
-  test("mergeLiveData with three teams " +
-    "maintains zero-sum") {
-    val teamCId = UUID.fromString(
-      "00000000-0000-0000-0000-000000000003"
-    )
+  test("mergeLiveData with three teams " + "maintains zero-sum") {
+    val teamCId = UUID.fromString("00000000-0000-0000-0000-000000000003")
     val report = baseReport(List(
-      teamColumn(
-        teamAId, "Team A", "Alice",
-        List(baseRow(1, golfer1Id, "SCHEFFLER"))
-      ),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY"))
-      ),
-      teamColumn(
-        teamCId, "Team C", "Charlie",
-        List(baseRow(1, golfer3Id, "RAHM"))
-      )
+      teamColumn(teamAId, "Team A", "Alice", List(baseRow(1, golfer1Id, "SCHEFFLER"))),
+      teamColumn(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY"))),
+      teamColumn(teamCId, "Team C", "Charlie", List(baseRow(1, golfer3Id, "RAHM")))
     ))
 
     // Team A: $18, Team B: $12, Team C: $0
@@ -665,34 +507,27 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore(
-            "Scottie Scheffler", golfer1Id, 1, 1,
-            Some(-12), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)
-          ))
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-12), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
         ),
         PreviewTeamScore(
-          teamBId, "Team B", "Bob",
+          teamBId,
+          "Team B",
+          "Bob",
           BigDecimal(12),
-          List(golferScore(
-            "Rory McIlroy", golfer2Id, 2, 1,
-            Some(-10), BigDecimal(12),
-            BigDecimal(100), BigDecimal(12)
-          ))
+          List(golferScore("Rory McIlroy", golfer2Id, 2, 1, Some(-10), BigDecimal(12), BigDecimal(100), BigDecimal(12)))
         ),
-        PreviewTeamScore(
-          teamCId, "Team C", "Charlie",
-          BigDecimal(0), Nil
-        )
+        PreviewTeamScore(teamCId, "Team C", "Charlie", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
     val weeklyA = result.teams(0).weeklyTotal
     val weeklyB = result.teams(1).weeklyTotal
     val weeklyC = result.teams(2).weeklyTotal
@@ -700,24 +535,14 @@ class LiveOverlayServiceTest extends FunSuite:
     assertEquals(weeklyA, BigDecimal(24))
     assertEquals(weeklyB, BigDecimal(6))
     assertEquals(weeklyC, BigDecimal(-30))
-    assertEquals(
-      weeklyA + weeklyB + weeklyC, BigDecimal(0)
-    )
+    assertEquals(weeklyA + weeklyB + weeklyC, BigDecimal(0))
   }
 
-  test("mergeLiveData updates season_earnings " +
-    "and season_top_tens") {
-    val row = baseRow(
-      1, golfer1Id, "SCHEFFLER",
-      seasonEarnings = BigDecimal(50),
-      seasonTopTens = 3
-    )
+  test("mergeLiveData updates season_earnings " + "and season_top_tens") {
+    val row = baseRow(1, golfer1Id, "SCHEFFLER", seasonEarnings = BigDecimal(50), seasonTopTens = 3)
     val report = baseReport(List(
       teamColumn(teamAId, "Team A", "Alice", List(row)),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY"))
-      )
+      teamColumn(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")))
     ))
 
     val preview = EspnLivePreview(
@@ -728,25 +553,20 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore(
-            "Scottie Scheffler", golfer1Id, 1, 1,
-            Some(-10), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)
-          ))
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
         ),
-        PreviewTeamScore(
-          teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil
-        )
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
     val r = result.teams.head.rows.head
 
     // season_earnings = prior 50 + live 18 = 68
@@ -757,14 +577,8 @@ class LiveOverlayServiceTest extends FunSuite:
 
   test("mergeLiveData sets score_to_par string") {
     val report = baseReport(List(
-      teamColumn(
-        teamAId, "Team A", "Alice",
-        List(baseRow(1, golfer1Id, "SCHEFFLER"))
-      ),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY"))
-      )
+      teamColumn(teamAId, "Team A", "Alice", List(baseRow(1, golfer1Id, "SCHEFFLER"))),
+      teamColumn(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")))
     ))
 
     val preview = EspnLivePreview(
@@ -775,49 +589,40 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore(
-            "Scottie Scheffler", golfer1Id, 1, 1,
-            Some(-10), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)
-          ))
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
         ),
         PreviewTeamScore(
-          teamBId, "Team B", "Bob",
+          teamBId,
+          "Team B",
+          "Bob",
           BigDecimal(12),
-          List(golferScore(
-            "Rory McIlroy", golfer2Id, 2, 1,
-            Some(0), BigDecimal(12),
-            BigDecimal(100), BigDecimal(12)
-          ))
+          List(golferScore("Rory McIlroy", golfer2Id, 2, 1, Some(0), BigDecimal(12), BigDecimal(100), BigDecimal(12)))
         )
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default)
 
     // Team A golfer: -10 should be "-10"
-    assertEquals(
-      result.teams(0).rows.head.scoreToPar,
-      Some("-10")
-    )
+    assertEquals(result.teams(0).rows.head.scoreToPar, Some("-10"))
     // Team B golfer: 0 should be "E"
-    assertEquals(
-      result.teams(1).rows.head.scoreToPar,
-      Some("E")
-    )
+    assertEquals(result.teams(1).rows.head.scoreToPar, Some("E"))
   }
 
   // ---- Additive mode tests (season report overlay) ----
 
-  test("mergeLiveData additive mode " +
-    "adds live earnings to base") {
+  test("mergeLiveData additive mode " + "adds live earnings to base") {
     val rows = List(baseRow(
-      1, golfer1Id, "SCHEFFLER",
+      1,
+      golfer1Id,
+      "SCHEFFLER",
       earnings = BigDecimal(20),
       topTens = 2,
       seasonEarnings = BigDecimal(20),
@@ -826,9 +631,13 @@ class LiveOverlayServiceTest extends FunSuite:
     val report = baseReport(List(
       teamColumn(teamAId, "Team A", "Alice", rows),
       teamColumn(
-        teamBId, "Team B", "Bob",
+        teamBId,
+        "Team B",
+        "Bob",
         List(baseRow(
-          1, golfer2Id, "MCILROY",
+          1,
+          golfer2Id,
+          "MCILROY",
           earnings = BigDecimal(15),
           topTens = 1,
           seasonEarnings = BigDecimal(15),
@@ -845,59 +654,37 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore(
-            "Scottie Scheffler", golfer1Id, 1, 1,
-            Some(-10), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)
-          ))
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
         ),
-        PreviewTeamScore(
-          teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil
-        )
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default,
-      additive = true
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default, additive = true)
 
     // Team A: base $20 + live $18 = $38
-    assertEquals(
-      result.teams(0).rows.head.earnings,
-      BigDecimal(38)
-    )
+    assertEquals(result.teams(0).rows.head.earnings, BigDecimal(38))
     // Top tens: base 2 + 1 live = 3
     assertEquals(result.teams(0).rows.head.topTens, 3)
     // Season earnings: 20 + 18 = 38
-    assertEquals(
-      result.teams(0).rows.head.seasonEarnings,
-      BigDecimal(38)
-    )
+    assertEquals(result.teams(0).rows.head.seasonEarnings, BigDecimal(38))
   }
 
-  test("additive mode keeps base earnings " +
-    "for unmatched golfers") {
+  test("additive mode keeps base earnings " + "for unmatched golfers") {
     val rows = List(
-      baseRow(
-        1, golfer1Id, "SCHEFFLER",
-        earnings = BigDecimal(20), topTens = 2
-      ),
-      baseRow(
-        2, golfer3Id, "NOBODY",
-        earnings = BigDecimal(10), topTens = 1
-      )
+      baseRow(1, golfer1Id, "SCHEFFLER", earnings = BigDecimal(20), topTens = 2),
+      baseRow(2, golfer3Id, "NOBODY", earnings = BigDecimal(10), topTens = 1)
     )
     val report = baseReport(List(
       teamColumn(teamAId, "Team A", "Alice", rows),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY"))
-      )
+      teamColumn(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")))
     ))
 
     val preview = EspnLivePreview(
@@ -908,26 +695,20 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore(
-            "Scottie Scheffler", golfer1Id, 1, 1,
-            Some(-10), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)
-          ))
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
         ),
-        PreviewTeamScore(
-          teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil
-        )
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default,
-      additive = true
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default, additive = true)
     val teamARows = result.teams(0).rows
 
     // golfer3 not in live data — keeps base $10
@@ -936,28 +717,15 @@ class LiveOverlayServiceTest extends FunSuite:
     assertEquals(teamARows(1).topTens, 1)
   }
 
-  test("additive mode computes correct " +
-    "zero-sum totals") {
+  test("additive mode computes correct " + "zero-sum totals") {
     // Season cumulative: A=$20, B=$15, Pot=$35
     // Live overlay: A gets $18, B gets $0
     // Combined: A=$38, B=$15, Pot=$53
     // A zero-sum = $38*2 - $53 = $23
     // B zero-sum = $15*2 - $53 = -$23
     val report = baseReport(List(
-      teamColumn(
-        teamAId, "Team A", "Alice",
-        List(baseRow(
-          1, golfer1Id, "SCHEFFLER",
-          earnings = BigDecimal(20)
-        ))
-      ),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(
-          1, golfer2Id, "MCILROY",
-          earnings = BigDecimal(15)
-        ))
-      )
+      teamColumn(teamAId, "Team A", "Alice", List(baseRow(1, golfer1Id, "SCHEFFLER", earnings = BigDecimal(20)))),
+      teamColumn(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY", earnings = BigDecimal(15))))
     ))
 
     val preview = EspnLivePreview(
@@ -968,26 +736,20 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore(
-            "Scottie Scheffler", golfer1Id, 1, 1,
-            Some(-10), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)
-          ))
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
         ),
-        PreviewTeamScore(
-          teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil
-        )
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default,
-      additive = true
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default, additive = true)
 
     val weeklyA = result.teams(0).weeklyTotal
     val weeklyB = result.teams(1).weeklyTotal
@@ -997,30 +759,17 @@ class LiveOverlayServiceTest extends FunSuite:
     assertEquals(weeklyA + weeklyB, BigDecimal(0))
   }
 
-  test("additive mode top_ten_count " +
-    "sums row-level counts") {
+  test("additive mode top_ten_count " + "sums row-level counts") {
     // Two golfers on Team A: one with 3 cumulative
     // top-10s, one with 1. Live adds 1 to the first.
     // Expected top_ten_count = (3+1) + 1 = 5
     val rows = List(
-      baseRow(
-        1, golfer1Id, "SCHEFFLER",
-        earnings = BigDecimal(30), topTens = 3
-      ),
-      baseRow(
-        2, golfer3Id, "RAHM",
-        earnings = BigDecimal(10), topTens = 1
-      )
+      baseRow(1, golfer1Id, "SCHEFFLER", earnings = BigDecimal(30), topTens = 3),
+      baseRow(2, golfer3Id, "RAHM", earnings = BigDecimal(10), topTens = 1)
     )
     val report = baseReport(List(
-      teamColumn(
-        teamAId, "Team A", "Alice", rows,
-        topTenCount = 4
-      ),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY"))
-      )
+      teamColumn(teamAId, "Team A", "Alice", rows, topTenCount = 4),
+      teamColumn(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")))
     ))
 
     val preview = EspnLivePreview(
@@ -1031,26 +780,20 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore(
-            "Scottie Scheffler", golfer1Id, 1, 1,
-            Some(-10), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)
-          ))
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
         ),
-        PreviewTeamScore(
-          teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil
-        )
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.mergeLiveData(
-      report, List(preview), SeasonRules.default,
-      additive = true
-    )
+    val result = service.mergeLiveData(report, List(preview), SeasonRules.default, additive = true)
     val topTenCount = result.teams(0).topTenCount
 
     // 3+1 (golfer1 + live) + 1 (golfer3 kept) = 5
@@ -1059,28 +802,23 @@ class LiveOverlayServiceTest extends FunSuite:
 
   // ---- overlayPriorLivePreview tests ----
 
-  test("overlayPriorLivePreview adds to previous, " +
-    "not earnings") {
+  test("overlayPriorLivePreview adds to previous, " + "not earnings") {
     val rows = List(baseRow(
-      1, golfer1Id, "SCHEFFLER",
+      1,
+      golfer1Id,
+      "SCHEFFLER",
       earnings = BigDecimal(5),
       topTens = 1,
       seasonEarnings = BigDecimal(20),
       seasonTopTens = 2
     ))
     val report = baseReport(List(
+      teamColumn(teamAId, "Team A", "Alice", rows, previous = BigDecimal(10), topTenCount = 2),
       teamColumn(
-        teamAId, "Team A", "Alice", rows,
-        previous = BigDecimal(10),
-        topTenCount = 2
-      ),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(
-          1, golfer2Id, "MCILROY",
-          seasonEarnings = BigDecimal(15),
-          seasonTopTens = 1
-        )),
+        teamBId,
+        "Team B",
+        "Bob",
+        List(baseRow(1, golfer2Id, "MCILROY", seasonEarnings = BigDecimal(15), seasonTopTens = 1)),
         previous = BigDecimal(-10),
         topTenCount = 1
       )
@@ -1095,50 +833,33 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(18),
-          List(golferScore(
-            "Scottie Scheffler", golfer1Id, 1, 1,
-            Some(-10), BigDecimal(18),
-            BigDecimal(100), BigDecimal(18)
-          ))
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 1, 1, Some(-10), BigDecimal(18), BigDecimal(100), BigDecimal(18))
+          )
         ),
-        PreviewTeamScore(
-          teamBId, "Team B", "Bob",
-          BigDecimal(0), Nil
-        )
+        PreviewTeamScore(teamBId, "Team B", "Bob", BigDecimal(0), Nil)
       ),
       leaderboard = Nil
     )
 
-    val result = service.overlayPriorLivePreview(
-      report, preview, SeasonRules.default
-    )
+    val result = service.overlayPriorLivePreview(report, preview, SeasonRules.default)
 
     // Earnings should be UNCHANGED (still $5)
-    assertEquals(
-      result.teams(0).rows.head.earnings,
-      BigDecimal(5)
-    )
+    assertEquals(result.teams(0).rows.head.earnings, BigDecimal(5))
 
     // Previous: $10 + $18 (zero-sum from prior)
     // Prior zero-sum: A=$18*2-$18=$18, B=$0*2-$18=-$18
-    assertEquals(
-      result.teams(0).previous, BigDecimal(28)
-    )
-    assertEquals(
-      result.teams(1).previous, BigDecimal(-28)
-    )
+    assertEquals(result.teams(0).previous, BigDecimal(28))
+    assertEquals(result.teams(1).previous, BigDecimal(-28))
 
     // Season earnings updated for golfer1
-    assertEquals(
-      result.teams(0).rows.head.seasonEarnings,
-      BigDecimal(38)
-    )
+    assertEquals(result.teams(0).rows.head.seasonEarnings, BigDecimal(38))
     // Season top tens updated
-    assertEquals(
-      result.teams(0).rows.head.seasonTopTens, 3
-    )
+    assertEquals(result.teams(0).rows.head.seasonTopTens, 3)
     // Top ten count updated
     assertEquals(result.teams(0).topTenCount, 3)
 
@@ -1146,19 +867,10 @@ class LiveOverlayServiceTest extends FunSuite:
     assert(result.live.contains(true))
   }
 
-  test("overlayPriorLivePreview maintains " +
-    "zero-sum in previous") {
+  test("overlayPriorLivePreview maintains " + "zero-sum in previous") {
     val report = baseReport(List(
-      teamColumn(
-        teamAId, "Team A", "Alice",
-        List(baseRow(1, golfer1Id, "SCHEFFLER")),
-        previous = BigDecimal(0)
-      ),
-      teamColumn(
-        teamBId, "Team B", "Bob",
-        List(baseRow(1, golfer2Id, "MCILROY")),
-        previous = BigDecimal(0)
-      )
+      teamColumn(teamAId, "Team A", "Alice", List(baseRow(1, golfer1Id, "SCHEFFLER")), previous = BigDecimal(0)),
+      teamColumn(teamBId, "Team B", "Bob", List(baseRow(1, golfer2Id, "MCILROY")), previous = BigDecimal(0))
     ))
 
     val preview = EspnLivePreview(
@@ -1169,30 +881,26 @@ class LiveOverlayServiceTest extends FunSuite:
       totalCompetitors = 100,
       teams = List(
         PreviewTeamScore(
-          teamAId, "Team A", "Alice",
+          teamAId,
+          "Team A",
+          "Alice",
           BigDecimal(12),
-          List(golferScore(
-            "Scottie Scheffler", golfer1Id, 2, 1,
-            Some(-8), BigDecimal(12),
-            BigDecimal(100), BigDecimal(12)
-          ))
+          List(
+            golferScore("Scottie Scheffler", golfer1Id, 2, 1, Some(-8), BigDecimal(12), BigDecimal(100), BigDecimal(12))
+          )
         ),
         PreviewTeamScore(
-          teamBId, "Team B", "Bob",
+          teamBId,
+          "Team B",
+          "Bob",
           BigDecimal(10),
-          List(golferScore(
-            "Rory McIlroy", golfer2Id, 3, 1,
-            Some(-6), BigDecimal(10),
-            BigDecimal(100), BigDecimal(10)
-          ))
+          List(golferScore("Rory McIlroy", golfer2Id, 3, 1, Some(-6), BigDecimal(10), BigDecimal(100), BigDecimal(10)))
         )
       ),
       leaderboard = Nil
     )
 
-    val result = service.overlayPriorLivePreview(
-      report, preview, SeasonRules.default
-    )
+    val result = service.overlayPriorLivePreview(report, preview, SeasonRules.default)
 
     val prevA = result.teams(0).previous
     val prevB = result.teams(1).previous
@@ -1207,11 +915,7 @@ class LiveOverlayServiceTest extends FunSuite:
 
   private val seasonId = UUID.randomUUID()
 
-  private def mkTournament(
-    name: String,
-    startDate: String,
-    status: String = "completed"
-  ): com.cwfgw.domain.Tournament =
+  private def mkTournament(name: String, startDate: String, status: String = "completed"): com.cwfgw.domain.Tournament =
     com.cwfgw.domain.Tournament(
       id = UUID.randomUUID(),
       pgaTournamentId = None,
@@ -1236,8 +940,7 @@ class LiveOverlayServiceTest extends FunSuite:
     assert(!ReportHelpers.tBefore(week8a, week8a))
   }
 
-  test("tBefore orders different-date " +
-    "tournaments by date") {
+  test("tBefore orders different-date " + "tournaments by date") {
     val week7 = mkTournament("Week 7", "2026-02-26")
     val week8a = mkTournament("Week 8A", "2026-03-05")
 
@@ -1254,40 +957,27 @@ class LiveOverlayServiceTest extends FunSuite:
     assert(!ReportHelpers.tOnOrBefore(week8b, week8a))
   }
 
-  test("filterThroughTournament includes 8A " +
-    "but not 8B when through=8A") {
+  test("filterThroughTournament includes 8A " + "but not 8B when through=8A") {
     val week7 = mkTournament("Week 7", "2026-02-26")
     val week8a = mkTournament("Week 8A", "2026-03-05")
     val week8b = mkTournament("Week 8B", "2026-03-05")
     val all = List(week7, week8a, week8b)
 
-    val through8a = ReportHelpers.filterThroughTournament(
-      all, Some(week8a)
-    )
-    assertEquals(
-      through8a.map(_.name).toSet,
-      Set("Week 7", "Week 8A")
-    )
+    val through8a = ReportHelpers.filterThroughTournament(all, Some(week8a))
+    assertEquals(through8a.map(_.name).toSet, Set("Week 7", "Week 8A"))
   }
 
-  test("filterThroughTournament includes both " +
-    "8A and 8B when through=8B") {
+  test("filterThroughTournament includes both " + "8A and 8B when through=8B") {
     val week7 = mkTournament("Week 7", "2026-02-26")
     val week8a = mkTournament("Week 8A", "2026-03-05")
     val week8b = mkTournament("Week 8B", "2026-03-05")
     val all = List(week7, week8a, week8b)
 
-    val through8b = ReportHelpers.filterThroughTournament(
-      all, Some(week8b)
-    )
-    assertEquals(
-      through8b.map(_.name).toSet,
-      Set("Week 7", "Week 8A", "Week 8B")
-    )
+    val through8b = ReportHelpers.filterThroughTournament(all, Some(week8b))
+    assertEquals(through8b.map(_.name).toSet, Set("Week 7", "Week 8A", "Week 8B"))
   }
 
-  test("filterThroughTournament returns all " +
-    "when through=None") {
+  test("filterThroughTournament returns all " + "when through=None") {
     val week7 = mkTournament("Week 7", "2026-02-26")
     val week8a = mkTournament("Week 8A", "2026-03-05")
     val all = List(week7, week8a)

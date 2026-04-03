@@ -83,8 +83,13 @@ class TournamentService(espnImportService: EspnImportService, scoringService: Sc
                   _ <- TournamentRepository.update(
                     tournamentId,
                     UpdateTournament(
-                      name = None, startDate = None, endDate = None, courseName = None,
-                      status = Some("upcoming"), purseAmount = None, payoutMultiplier = None
+                      name = None,
+                      startDate = None,
+                      endDate = None,
+                      courseName = None,
+                      status = Some("upcoming"),
+                      purseAmount = None,
+                      payoutMultiplier = None
                     )
                   ).transact(xa)
                   _ <- scoringService.refreshStandings(seasonId)
@@ -129,13 +134,16 @@ class TournamentService(espnImportService: EspnImportService, scoringService: Sc
         case Some(season) => TournamentRepository.findAll(Some(seasonId), None).transact(xa).flatMap: tournaments =>
             checkSeasonComplete(tournaments) match
               case Some(msg) => IO.pure(Left(msg))
-              case None =>
-                SeasonRepository
-                .update(seasonId, UpdateSeason(
-                  name = None, status = Some("completed"), maxTeams = None,
-                  tieFloor = None, sideBetAmount = None
-                ))
-                .transact(xa).map(_ => Right(s"Season '${season.name}' finalized (${tournaments.size} tournaments)"))
+              case None => SeasonRepository.update(
+                  seasonId,
+                  UpdateSeason(
+                    name = None,
+                    status = Some("completed"),
+                    maxTeams = None,
+                    tieFloor = None,
+                    sideBetAmount = None
+                  )
+                ).transact(xa).map(_ => Right(s"Season '${season.name}' finalized (${tournaments.size} tournaments)"))
     yield result
 
   /** Pure: check if any tournaments block an operation (finalize or reset). Returns an error message if blocked. */

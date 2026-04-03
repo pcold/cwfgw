@@ -10,31 +10,28 @@ class ReportHelpersTest extends FunSuite:
   private val now = Instant.now()
   private val seasonId = UUID.randomUUID()
 
-  private def mkTournament(
-    name: String,
-    date: String,
-    pgaId: Option[String] = None
-  ): Tournament =
-    Tournament(
-      id = UUID.randomUUID(), pgaTournamentId = pgaId, name = name, seasonId = seasonId,
-      startDate = LocalDate.parse(date), endDate = LocalDate.parse(date),
-      courseName = None, status = "completed", purseAmount = None,
-      payoutMultiplier = BigDecimal(1), week = None, createdAt = now
-    )
+  private def mkTournament(name: String, date: String, pgaId: Option[String] = None): Tournament = Tournament(
+    id = UUID.randomUUID(),
+    pgaTournamentId = pgaId,
+    name = name,
+    seasonId = seasonId,
+    startDate = LocalDate.parse(date),
+    endDate = LocalDate.parse(date),
+    courseName = None,
+    status = "completed",
+    purseAmount = None,
+    payoutMultiplier = BigDecimal(1),
+    week = None,
+    createdAt = now
+  )
 
   // ---- formatStp ----
 
-  test("formatStp: even par") {
-    assertEquals(ReportHelpers.formatStp(0), "E")
-  }
+  test("formatStp: even par") { assertEquals(ReportHelpers.formatStp(0), "E") }
 
-  test("formatStp: over par") {
-    assertEquals(ReportHelpers.formatStp(5), "+5")
-  }
+  test("formatStp: over par") { assertEquals(ReportHelpers.formatStp(5), "+5") }
 
-  test("formatStp: under par") {
-    assertEquals(ReportHelpers.formatStp(-3), "-3")
-  }
+  test("formatStp: under par") { assertEquals(ReportHelpers.formatStp(-3), "-3") }
 
   // ---- buildStandingsOrder ----
 
@@ -56,9 +53,7 @@ class ReportHelpersTest extends FunSuite:
     assertEquals(standings(2), StandingsEntry(3, "Team A", BigDecimal(50)))
   }
 
-  test("buildStandingsOrder handles empty list") {
-    assertEquals(ReportHelpers.buildStandingsOrder(Nil), Nil)
-  }
+  test("buildStandingsOrder handles empty list") { assertEquals(ReportHelpers.buildStandingsOrder(Nil), Nil) }
 
   // ---- recomputeSideBetPayouts ----
 
@@ -156,22 +151,27 @@ class ReportHelpersTest extends FunSuite:
 
   // ---- helpers ----
 
-  private def mkTeamColumn(
-    teamId: UUID,
-    teamName: String,
-    totalCash: BigDecimal
-  ): ReportTeamColumn =
-    ReportTeamColumn(
-      teamId = teamId, teamName = teamName, ownerName = "Owner",
-      rows = Nil, topTens = BigDecimal(0), weeklyTotal = BigDecimal(0),
-      previous = BigDecimal(0), subtotal = BigDecimal(0),
-      topTenCount = 0, topTenMoney = BigDecimal(0),
-      sideBets = BigDecimal(0), totalCash = totalCash
-    )
+  private def mkTeamColumn(teamId: UUID, teamName: String, totalCash: BigDecimal): ReportTeamColumn = ReportTeamColumn(
+    teamId = teamId,
+    teamName = teamName,
+    ownerName = "Owner",
+    rows = Nil,
+    topTens = BigDecimal(0),
+    weeklyTotal = BigDecimal(0),
+    previous = BigDecimal(0),
+    subtotal = BigDecimal(0),
+    topTenCount = 0,
+    topTenMoney = BigDecimal(0),
+    sideBets = BigDecimal(0),
+    totalCash = totalCash
+  )
 
-  private def mkPreview(espnId: String, name: String): EspnLivePreview =
-    EspnLivePreview(
-      espnName = name, espnId = espnId, completed = false,
-      payoutMultiplier = BigDecimal(1), totalCompetitors = 0,
-      teams = Nil, leaderboard = Nil
-    )
+  private def mkPreview(espnId: String, name: String): EspnLivePreview = EspnLivePreview(
+    espnName = name,
+    espnId = espnId,
+    completed = false,
+    payoutMultiplier = BigDecimal(1),
+    totalCompetitors = 0,
+    teams = Nil,
+    leaderboard = Nil
+  )

@@ -84,9 +84,7 @@ class TeamServiceTest extends FunSuite:
   // buildRosterView — edge cases
   // ================================================================
 
-  test("buildRosterView: empty rows returns empty list") {
-    assertEquals(service.buildRosterView(Nil), Nil)
-  }
+  test("buildRosterView: empty rows returns empty list") { assertEquals(service.buildRosterView(Nil), Nil) }
 
   test("buildRosterView: single team single pick") {
     val rows = List(mkRow(teamId(1), "Solo", 1, "Adam", "Scott", BigDecimal(50), golferId(1)))

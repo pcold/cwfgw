@@ -282,18 +282,18 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
     case Some(eid) =>
       // Check if golfer with this ESPN ID already exists
       GolferRepository.findByPgaPlayerId(eid).flatMap:
-          case Some(g) => g.pure[ConnectionIO]
-          case None =>
-            val fullName = espnName.getOrElse(rosterName)
-            val parts = fullName.split("\\s+", 2)
-            val (first, last) = if parts.length >= 2 then (parts(0), parts(1)) else ("", parts(0))
-            GolferRepository.create(CreateGolfer(
-              pgaPlayerId = Some(eid),
-              firstName = first,
-              lastName = last,
-              country = None,
-              worldRanking = None
-            ))
+        case Some(g) => g.pure[ConnectionIO]
+        case None =>
+          val fullName = espnName.getOrElse(rosterName)
+          val parts = fullName.split("\\s+", 2)
+          val (first, last) = if parts.length >= 2 then (parts(0), parts(1)) else ("", parts(0))
+          GolferRepository.create(CreateGolfer(
+            pgaPlayerId = Some(eid),
+            firstName = first,
+            lastName = last,
+            country = None,
+            worldRanking = None
+          ))
     case None =>
       // No ESPN ID — create with roster name only
       val normalized = rosterName.trim
@@ -331,4 +331,3 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
   private[service] def wordOverlap(words: Set[String], target: String): Double =
     val targetWords = target.split("\\s+").filter(_.length >= 3).toSet
     if words.isEmpty || targetWords.isEmpty then 0.0 else words.intersect(targetWords).size.toDouble / words.size
-

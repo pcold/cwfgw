@@ -30,5 +30,4 @@ object ReportRoutes:
         .handleErrorWith(RouteHelpers.badRequestFromError)
 
     case GET -> Root / "api" / "v1" / "seasons" / UUIDVar(seasonId) / "golfer" / UUIDVar(golferId) / "history" =>
-      service.getGolferHistory(seasonId, golferId).flatMap(Ok(_))
-        .handleErrorWith(RouteHelpers.badRequestFromError)
+      service.getGolferHistory(seasonId, golferId).flatMap(Ok(_)).handleErrorWith(RouteHelpers.badRequestFromError)

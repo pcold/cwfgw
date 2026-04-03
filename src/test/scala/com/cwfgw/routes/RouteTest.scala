@@ -26,8 +26,19 @@ class RouteTest extends FunSuite:
   private val sampleId = UUID.fromString("11111111-1111-1111-1111-111111111111")
   private val sampleInstant = Instant.parse("2026-01-15T12:00:00Z")
   private val sampleLeague = League(sampleId, "Test League", sampleInstant)
-  private val sampleSeason =
-    Season(sampleId, sampleId, "Season 1", 2026, 1, "active", BigDecimal(1), BigDecimal(15), 13, sampleInstant, sampleInstant)
+  private val sampleSeason = Season(
+    sampleId,
+    sampleId,
+    "Season 1",
+    2026,
+    1,
+    "active",
+    BigDecimal(1),
+    BigDecimal(15),
+    13,
+    sampleInstant,
+    sampleInstant
+  )
   private val sampleTeam = Team(sampleId, sampleId, "Alice", "Team A", Some(1), sampleInstant, sampleInstant)
 
   // ================================================================
@@ -238,8 +249,7 @@ class RouteTest extends FunSuite:
 
   private val draftService = new DraftService(null):
     override def get(seasonId: UUID): IO[Option[Draft]] =
-      if seasonId == sampleId then
-        IO.pure(Some(Draft(sampleId, sampleId, "pending", "snake", None, None, sampleInstant)))
+      if seasonId == sampleId then IO.pure(Some(Draft(sampleId, sampleId, "pending", "snake", None, None, sampleInstant)))
       else IO.pure(None)
     override def start(seasonId: UUID): IO[Either[String, Draft]] = IO.pure(Left("Draft is already in_progress"))
     override def getPicks(seasonId: UUID): IO[Either[String, List[DraftPick]]] =
@@ -303,31 +313,16 @@ class RouteTest extends FunSuite:
   // ================================================================
 
   private val reportService = new WeeklyReportService(null, null):
-    override def getReport(
-      seasonId: UUID,
-      tournamentId: UUID,
-      live: Boolean
-    ): IO[WeeklyReport] = IO.pure(WeeklyReport(
-      tournament = ReportTournamentInfo(
-        None, Some("Test Open"), None, None,
-        None, BigDecimal(1), None
-      ),
+    override def getReport(seasonId: UUID, tournamentId: UUID, live: Boolean): IO[WeeklyReport] = IO.pure(WeeklyReport(
+      tournament = ReportTournamentInfo(None, Some("Test Open"), None, None, None, BigDecimal(1), None),
       teams = Nil,
       undraftedTopTens = Nil,
       sideBetDetail = Nil,
       standingsOrder = Nil
     ))
-    override def getRankings(
-      seasonId: UUID,
-      live: Boolean,
-      throughTournamentId: Option[UUID]
-    ): IO[Rankings] = IO.pure(Rankings(
-      teams = Nil, weeks = Nil, tournamentNames = Nil
-    ))
-    override def getGolferHistory(
-      seasonId: UUID,
-      golferId: UUID
-    ): IO[GolferHistory] = IO.pure(GolferHistory(
+    override def getRankings(seasonId: UUID, live: Boolean, throughTournamentId: Option[UUID]): IO[Rankings] = IO
+      .pure(Rankings(teams = Nil, weeks = Nil, tournamentNames = Nil))
+    override def getGolferHistory(seasonId: UUID, golferId: UUID): IO[GolferHistory] = IO.pure(GolferHistory(
       golferName = "Scottie Scheffler",
       golferId = golferId,
       totalEarnings = BigDecimal(0),

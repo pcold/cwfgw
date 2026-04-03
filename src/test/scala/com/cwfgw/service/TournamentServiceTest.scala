@@ -16,13 +16,20 @@ class TournamentServiceTest extends FunSuite:
   private val now = Instant.now()
   private val seasonId = UUID.randomUUID()
 
-  private def mkTournament(name: String, date: String, status: String = "completed"): Tournament =
-    Tournament(
-      id = UUID.randomUUID(), pgaTournamentId = None, name = name, seasonId = seasonId,
-      startDate = LocalDate.parse(date), endDate = LocalDate.parse(date),
-      courseName = None, status = status, purseAmount = None,
-      payoutMultiplier = BigDecimal(1), week = None, createdAt = now
-    )
+  private def mkTournament(name: String, date: String, status: String = "completed"): Tournament = Tournament(
+    id = UUID.randomUUID(),
+    pgaTournamentId = None,
+    name = name,
+    seasonId = seasonId,
+    startDate = LocalDate.parse(date),
+    endDate = LocalDate.parse(date),
+    courseName = None,
+    status = status,
+    purseAmount = None,
+    payoutMultiplier = BigDecimal(1),
+    week = None,
+    createdAt = now
+  )
 
   // ================================================================
   // checkBlockingTournaments

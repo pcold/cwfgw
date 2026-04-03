@@ -81,8 +81,7 @@ object TournamentRepository:
   def deleteResultsByTournament(tournamentId: UUID): ConnectionIO[Int] =
     sql"DELETE FROM tournament_results WHERE tournament_id = $tournamentId".update.run
 
-  def deleteResultsBySeason(seasonId: UUID): ConnectionIO[Int] =
-    sql"""DELETE FROM tournament_results
+  def deleteResultsBySeason(seasonId: UUID): ConnectionIO[Int] = sql"""DELETE FROM tournament_results
           WHERE tournament_id IN (SELECT id FROM tournaments WHERE season_id = $seasonId)""".update.run
 
   def resetSeasonTournaments(seasonId: UUID): ConnectionIO[Int] =

@@ -19,8 +19,8 @@ object SeasonRepository:
       if conditions.isEmpty then Fragment.empty else fr"WHERE" ++ conditions.reduceLeft((a, b) => a ++ fr"AND" ++ b)
     (base ++ where ++ fr"ORDER BY season_year DESC, season_number DESC").query[Season].to[List]
 
-  def findById(id: UUID): ConnectionIO[Option[Season]] =
-    (fr"SELECT" ++ selectCols ++ fr"FROM seasons WHERE id = $id").query[Season].option
+  def findById(id: UUID): ConnectionIO[Option[Season]] = (fr"SELECT" ++ selectCols ++ fr"FROM seasons WHERE id = $id")
+    .query[Season].option
 
   /** Load the full SeasonRules for a season by joining the payouts and side bet rounds tables. */
   def getSeasonRules(seasonId: UUID): ConnectionIO[Option[SeasonRules]] =
@@ -29,11 +29,9 @@ object SeasonRepository:
       result <- seasonOpt.traverse { season =>
         for
           payouts <- sql"""SELECT amount FROM season_rule_payouts
-                           WHERE season_id = $seasonId ORDER BY position ASC"""
-            .query[BigDecimal].to[List]
+                           WHERE season_id = $seasonId ORDER BY position ASC""".query[BigDecimal].to[List]
           sideBetRounds <- sql"""SELECT round FROM season_rule_side_bet_rounds
-                                WHERE season_id = $seasonId ORDER BY round ASC"""
-            .query[Int].to[List]
+                                WHERE season_id = $seasonId ORDER BY round ASC""".query[Int].to[List]
         yield SeasonRules(
           payouts = if payouts.isEmpty then SeasonRules.default.payouts else payouts,
           tieFloor = season.tieFloor,
