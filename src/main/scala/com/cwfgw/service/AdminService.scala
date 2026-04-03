@@ -4,16 +4,14 @@ import cats.effect.IO
 import cats.implicits.*
 import doobie.*
 import doobie.implicits.*
-import io.circe.derivation.ConfiguredCodec
 import org.typelevel.log4cats.LoggerFactory
 
 import java.text.Normalizer
 import java.util.UUID
-import java.time.LocalDate
 
 import com.cwfgw.domain.{*, given}
 import com.cwfgw.espn.{EspnAthlete, EspnCalendarEntry, EspnClient}
-import com.cwfgw.repository.{TournamentRepository, LeagueRepository, TeamRepository, GolferRepository}
+import com.cwfgw.repository.{TournamentRepository, TeamRepository, GolferRepository}
 
 /** Admin operations: season upload, ESPN validation, data management. */
 class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFactory[IO]):
@@ -334,75 +332,3 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
     val targetWords = target.split("\\s+").filter(_.length >= 3).toSet
     if words.isEmpty || targetWords.isEmpty then 0.0 else words.intersect(targetWords).size.toDouble / words.size
 
-case class SeasonUploadResult(
-  seasonYear: Int,
-  tournamentsCreated: Int,
-  tournaments: List[TournamentCreated],
-  espnMatched: Int,
-  espnUnmatched: List[String]
-) derives ConfiguredCodec
-
-case class TournamentCreated(
-  id: UUID,
-  name: String,
-  week: String,
-  startDate: LocalDate,
-  endDate: LocalDate,
-  payoutMultiplier: BigDecimal,
-  espnId: Option[String],
-  espnName: Option[String]
-) derives ConfiguredCodec
-
-// -- Step 1: Preview result models --
-
-case class RosterPreviewResult(
-  teams: List[RosterTeamPreview],
-  totalPicks: Int,
-  exactMatches: Int,
-  ambiguous: Int,
-  noMatch: Int
-) derives ConfiguredCodec
-
-case class RosterTeamPreview(teamNumber: Int, teamName: String, picks: List[RosterPickPreview]) derives ConfiguredCodec
-
-case class RosterPickPreview(
-  round: Int,
-  inputName: String,
-  ownershipPct: Int,
-  matchStatus: String, // "exact", "ambiguous", "no_match"
-  espnId: Option[String],
-  espnName: Option[String],
-  suggestions: List[EspnSuggestion]
-) derives ConfiguredCodec
-
-case class EspnSuggestion(espnId: String, name: String) derives ConfiguredCodec
-
-// -- Step 2: Confirm models --
-
-case class ConfirmedTeam(teamNumber: Int, teamName: String, picks: List[ConfirmedPick]) derives ConfiguredCodec
-
-case class ConfirmedPick(
-  round: Int,
-  playerName: String,
-  ownershipPct: Int,
-  espnId: Option[String],
-  espnName: Option[String]
-) derives ConfiguredCodec
-
-// -- Upload result models --
-
-case class RosterUploadResult(teamsCreated: Int, golfersCreated: Int, teams: List[TeamUploadResult])
-    derives ConfiguredCodec
-
-case class TeamUploadResult(teamId: UUID, teamNumber: Int, teamName: String, picks: List[RosterPickResult])
-    derives ConfiguredCodec
-
-case class RosterPickResult(round: Int, golferName: String, golferId: UUID, ownershipPct: Int, created: Boolean)
-    derives ConfiguredCodec
-
-/** API response for ESPN calendar entries. Renames internal `id`/`label` to `espnId`/`name`.
-  */
-case class CalendarEntryResponse(espnId: String, name: String, startDate: String) derives ConfiguredCodec
-
-object CalendarEntryResponse:
-  def from(e: EspnCalendarEntry): CalendarEntryResponse = CalendarEntryResponse(e.id, e.label, e.startDate)
