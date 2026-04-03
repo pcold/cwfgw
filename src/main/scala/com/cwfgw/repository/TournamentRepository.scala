@@ -3,8 +3,6 @@ package com.cwfgw.repository
 import doobie.*
 import doobie.implicits.*
 import doobie.postgres.implicits.*
-import doobie.postgres.circe.jsonb.implicits.*
-import io.circe.Json
 import java.util.UUID
 import com.cwfgw.domain.*
 
@@ -12,7 +10,7 @@ object TournamentRepository:
 
   private val selectCols = fr"""id, pga_tournament_id, name, season_id, start_date,
          end_date, course_name, status, purse_amount,
-         payout_multiplier, metadata, created_at"""
+         payout_multiplier, week, created_at"""
 
   def findAll(seasonId: Option[UUID], status: Option[String]): ConnectionIO[List[Tournament]] =
     val base = fr"SELECT" ++ selectCols ++ fr"FROM tournaments"
@@ -27,13 +25,13 @@ object TournamentRepository:
   def create(req: CreateTournament): ConnectionIO[Tournament] = sql"""INSERT INTO tournaments (
             pga_tournament_id, name, season_id, start_date,
             end_date, course_name, purse_amount,
-            payout_multiplier, metadata
+            payout_multiplier, week
           ) VALUES (
             ${req.pgaTournamentId}, ${req.name}, ${req.seasonId},
             ${req.startDate}, ${req.endDate}, ${req.courseName},
             ${req.purseAmount},
             ${req.payoutMultiplier.getOrElse(BigDecimal(1))},
-            ${req.metadata.getOrElse(Json.obj())}
+            ${req.week}
           ) RETURNING $selectCols""".query[Tournament].unique
 
   def update(id: UUID, req: UpdateTournament): ConnectionIO[Option[Tournament]] =
@@ -53,8 +51,8 @@ object TournamentRepository:
 
   def findResults(tournamentId: UUID): ConnectionIO[List[TournamentResult]] =
     sql"""SELECT id, tournament_id, golfer_id, position,
-            score_to_par, total_strokes, earnings, round_scores,
-            made_cut, metadata
+            score_to_par, total_strokes, earnings,
+            round1, round2, round3, round4, made_cut
           FROM tournament_results
           WHERE tournament_id = $tournamentId
           ORDER BY position ASC NULLS LAST""".query[TournamentResult].to[List]
@@ -93,18 +91,21 @@ object TournamentRepository:
   def upsertResult(tournamentId: UUID, req: CreateTournamentResult): ConnectionIO[TournamentResult] =
     sql"""INSERT INTO tournament_results (
             tournament_id, golfer_id, position, score_to_par,
-            total_strokes, earnings, round_scores, made_cut
+            total_strokes, earnings,
+            round1, round2, round3, round4, made_cut
           ) VALUES (
             $tournamentId, ${req.golferId}, ${req.position},
             ${req.scoreToPar}, ${req.totalStrokes}, ${req.earnings},
-            ${req.roundScores.getOrElse(Json.Null)}, ${req.madeCut}
+            ${req.round1}, ${req.round2}, ${req.round3}, ${req.round4},
+            ${req.madeCut}
           ) ON CONFLICT (tournament_id, golfer_id) DO UPDATE SET
             position = EXCLUDED.position,
             score_to_par = EXCLUDED.score_to_par,
             total_strokes = EXCLUDED.total_strokes,
             earnings = EXCLUDED.earnings,
-            round_scores = EXCLUDED.round_scores,
+            round1 = EXCLUDED.round1, round2 = EXCLUDED.round2,
+            round3 = EXCLUDED.round3, round4 = EXCLUDED.round4,
             made_cut = EXCLUDED.made_cut
           RETURNING id, tournament_id, golfer_id, position,
-            score_to_par, total_strokes, earnings, round_scores,
-            made_cut, metadata""".query[TournamentResult].unique
+            score_to_par, total_strokes, earnings,
+            round1, round2, round3, round4, made_cut""".query[TournamentResult].unique

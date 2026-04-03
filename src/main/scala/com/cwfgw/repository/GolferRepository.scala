@@ -3,15 +3,13 @@ package com.cwfgw.repository
 import doobie.*
 import doobie.implicits.*
 import doobie.postgres.implicits.*
-import doobie.postgres.circe.jsonb.implicits.*
-import io.circe.Json
 import java.util.UUID
 import com.cwfgw.domain.*
 
 object GolferRepository:
 
   private val selectCols =
-    fr"id, pga_player_id, first_name, last_name, country, world_ranking, active, metadata, updated_at"
+    fr"id, pga_player_id, first_name, last_name, country, world_ranking, active, updated_at"
 
   def findAll(activeOnly: Boolean, search: Option[String]): ConnectionIO[List[Golfer]] =
     val base = fr"SELECT" ++ selectCols ++ fr"FROM golfers"
@@ -50,8 +48,7 @@ object GolferRepository:
       req.lastName.map(v => fr"last_name = $v"),
       req.country.map(v => fr"country = $v"),
       req.worldRanking.map(v => fr"world_ranking = $v"),
-      req.active.map(v => fr"active = $v"),
-      req.metadata.map(v => fr"metadata = $v")
+      req.active.map(v => fr"active = $v")
     ).flatten
     if sets.isEmpty then findById(id)
     else

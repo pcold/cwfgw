@@ -131,6 +131,7 @@ class WeeklyReportService(
     val action =
       for
         seasonOpt <- SeasonRepository.findById(seasonId)
+        rulesOpt <- SeasonRepository.getSeasonRules(seasonId)
         teams <- TeamRepository.findBySeason(seasonId)
         tournament <- TournamentRepository
           .findById(tournamentId)
@@ -157,8 +158,7 @@ class WeeklyReportService(
           ScoreRepository.getScores(seasonId, t.id)
         )
       yield
-        val rules = seasonOpt.map(_.seasonRules)
-          .getOrElse(SeasonRules.default)
+        val rules = rulesOpt.getOrElse(SeasonRules.default)
         val golferMap = allGolfers.map(g => g.id -> g).toMap
         val resultsByGolfer =
           results.map(r => r.golferId -> r).toMap
@@ -331,10 +331,7 @@ class WeeklyReportService(
       payoutMultiplier = tournament
         .map(_.payoutMultiplier)
         .getOrElse(BigDecimal(1)),
-      week = tournament.flatMap(
-        _.metadata.hcursor.downField("week")
-          .as[String].toOption
-      )
+      week = tournament.flatMap(_.week)
     )
 
   /** Build a single team's report column for getReport. */
@@ -504,6 +501,7 @@ class WeeklyReportService(
     val action =
       for
         seasonOpt <- SeasonRepository.findById(seasonId)
+        rulesOpt <- SeasonRepository.getSeasonRules(seasonId)
         teams <- TeamRepository.findBySeason(seasonId)
         allGolfers <- GolferRepository
           .findAll(activeOnly = false, search = None)
@@ -526,8 +524,7 @@ class WeeklyReportService(
       yield
         val nonCompleted = allSeasonTournaments
           .filter(_.status != "completed")
-        val rules = seasonOpt.map(_.seasonRules)
-          .getOrElse(SeasonRules.default)
+        val rules = rulesOpt.getOrElse(SeasonRules.default)
         val golferMap = allGolfers.map(g => g.id -> g).toMap
         val numTeams = teams.size
 
@@ -861,6 +858,7 @@ class WeeklyReportService(
     val action =
       for
         seasonOpt <- SeasonRepository.findById(seasonId)
+        rulesOpt <- SeasonRepository.getSeasonRules(seasonId)
         teams <- TeamRepository.findBySeason(seasonId)
         completedTournaments <- TournamentRepository
           .findAll(seasonId = None, status = Some("completed"))
@@ -877,8 +875,7 @@ class WeeklyReportService(
           ScoreRepository.getScores(seasonId, t.id)
         )
 
-        rules = seasonOpt.map(_.seasonRules)
-          .getOrElse(SeasonRules.default)
+        rules = rulesOpt.getOrElse(SeasonRules.default)
         includedIds =
           includedTournaments.map(_.id).toSet
 
@@ -934,10 +931,7 @@ class WeeklyReportService(
           sorted, allScores, teams, numTeams
         )
 
-        val weekLabels = sorted.map { t =>
-          t.metadata.hcursor.downField("week")
-            .as[String].getOrElse("")
-        }
+        val weekLabels = sorted.map(_.week.getOrElse(""))
         val tournamentLabels = sorted.map(_.name)
         val currentTotals = history.lastOption
           .getOrElse(
@@ -1094,8 +1088,7 @@ class WeeklyReportService(
             t.teamId ->
               (t.topTenEarnings * numTeams - totalPot)
           }.toMap
-          val weekLabel = tournament.metadata.hcursor
-            .downField("week").as[String].getOrElse("")
+          val weekLabel = tournament.week.getOrElse("")
 
           val liveByGolfer = preview.teams.flatMap { t =>
             t.golferScores.map(gs =>

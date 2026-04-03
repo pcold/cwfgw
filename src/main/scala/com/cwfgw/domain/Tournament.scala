@@ -1,6 +1,5 @@
 package com.cwfgw.domain
 
-import io.circe.Json
 import io.circe.derivation.ConfiguredCodec
 import java.util.UUID
 import java.time.{Instant, LocalDate}
@@ -16,7 +15,7 @@ case class Tournament(
   status: String,
   purseAmount: Option[Long],
   payoutMultiplier: BigDecimal,
-  metadata: Json,
+  week: Option[String],
   createdAt: Instant
 ) derives ConfiguredCodec
 
@@ -29,7 +28,7 @@ case class CreateTournament(
   courseName: Option[String],
   purseAmount: Option[Long],
   payoutMultiplier: Option[BigDecimal],
-  metadata: Option[Json] = None
+  week: Option[String] = None
 ) derives ConfiguredCodec
 
 case class UpdateTournament(
@@ -50,9 +49,11 @@ case class TournamentResult(
   scoreToPar: Option[Int],
   totalStrokes: Option[Int],
   earnings: Option[Long],
-  roundScores: Option[Json],
-  madeCut: Boolean,
-  metadata: Json
+  round1: Option[Int],
+  round2: Option[Int],
+  round3: Option[Int],
+  round4: Option[Int],
+  madeCut: Boolean
 ) derives ConfiguredCodec
 
 case class CreateTournamentResult(
@@ -61,6 +62,9 @@ case class CreateTournamentResult(
   scoreToPar: Option[Int],
   totalStrokes: Option[Int],
   earnings: Option[Long],
-  roundScores: Option[Json],
+  round1: Option[Int],
+  round2: Option[Int],
+  round3: Option[Int],
+  round4: Option[Int],
   madeCut: Boolean
 ) derives ConfiguredCodec

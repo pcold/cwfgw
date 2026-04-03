@@ -1,6 +1,5 @@
 package com.cwfgw.domain
 
-import io.circe.Json
 import io.circe.derivation.ConfiguredCodec
 import java.util.UUID
 import java.time.Instant
@@ -12,7 +11,12 @@ case class FantasyScore(
   tournamentId: UUID,
   golferId: UUID,
   points: BigDecimal,
-  breakdown: Json,
+  position: Int,
+  numTied: Int,
+  basePayout: BigDecimal,
+  ownershipPct: BigDecimal,
+  payout: BigDecimal,
+  multiplier: BigDecimal,
   calculatedAt: Instant
 ) derives ConfiguredCodec
 

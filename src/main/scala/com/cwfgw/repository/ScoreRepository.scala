@@ -4,17 +4,19 @@ import cats.data.NonEmptyList
 import doobie.*
 import doobie.implicits.*
 import doobie.postgres.implicits.*
-import doobie.postgres.circe.jsonb.implicits.*
-import io.circe.Json
 import java.util.UUID
 import com.cwfgw.domain.*
+import com.cwfgw.service.ScoreBreakdown
 
 object ScoreRepository:
 
+  private val selectCols = fr"""id, season_id, team_id, tournament_id, golfer_id, points,
+         position, num_tied, base_payout, ownership_pct, payout, multiplier, calculated_at"""
+
   def getScores(seasonId: UUID, tournamentId: UUID): ConnectionIO[List[FantasyScore]] =
-    sql"""SELECT id, season_id, team_id, tournament_id, golfer_id, points, breakdown, calculated_at
-          FROM fantasy_scores WHERE season_id = $seasonId AND tournament_id = $tournamentId
-          ORDER BY points DESC""".query[FantasyScore].to[List]
+    (fr"SELECT" ++ selectCols ++ fr"""FROM fantasy_scores
+          WHERE season_id = $seasonId AND tournament_id = $tournamentId
+          ORDER BY points DESC""").query[FantasyScore].to[List]
 
   def upsertScore(
     seasonId: UUID,
@@ -22,22 +24,28 @@ object ScoreRepository:
     tournamentId: UUID,
     golferId: UUID,
     points: BigDecimal,
-    breakdown: Json
+    bd: ScoreBreakdown
   ): ConnectionIO[FantasyScore] =
-    sql"""INSERT INTO fantasy_scores (season_id, team_id, tournament_id, golfer_id, points, breakdown)
-          VALUES ($seasonId, $teamId, $tournamentId, $golferId, $points, $breakdown)
+    sql"""INSERT INTO fantasy_scores
+            (season_id, team_id, tournament_id, golfer_id, points,
+             position, num_tied, base_payout, ownership_pct, payout, multiplier)
+          VALUES ($seasonId, $teamId, $tournamentId, $golferId, $points,
+                  ${bd.position}, ${bd.numTied}, ${bd.basePayout},
+                  ${bd.ownershipPct}, ${bd.payout}, ${bd.multiplier})
           ON CONFLICT (season_id, team_id, tournament_id, golfer_id) DO UPDATE SET
             points = EXCLUDED.points,
-            breakdown = EXCLUDED.breakdown,
+            position = EXCLUDED.position, num_tied = EXCLUDED.num_tied,
+            base_payout = EXCLUDED.base_payout, ownership_pct = EXCLUDED.ownership_pct,
+            payout = EXCLUDED.payout, multiplier = EXCLUDED.multiplier,
             calculated_at = now()
-          RETURNING id, season_id, team_id, tournament_id, golfer_id, points, breakdown, calculated_at"""
+          RETURNING $selectCols"""
       .query[FantasyScore].unique
 
   def getGolferSeasonScores(seasonId: UUID, golferId: UUID): ConnectionIO[List[(String, Int, BigDecimal, BigDecimal)]] =
     sql"""SELECT t.name,
-                 COALESCE((MIN(fs.breakdown->>'position'))::int, 0),
+                 COALESCE(MIN(fs.position), 0),
                  SUM(fs.points),
-                 COALESCE(MIN((fs.breakdown->>'base_payout')::numeric), 0)
+                 COALESCE(MIN(fs.base_payout), 0)
           FROM fantasy_scores fs
           JOIN tournaments t ON fs.tournament_id = t.id
           WHERE fs.season_id = $seasonId AND fs.golfer_id = $golferId

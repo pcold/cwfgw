@@ -44,7 +44,7 @@ class DomainCodecTest extends FunSuite:
   // ================================================================
 
   test("Season encodes to snake_case JSON") {
-    val season = Season(sampleId, sampleId, "Season 1", 2026, 1, "active", Json.obj(), 13, sampleInstant, sampleInstant)
+    val season = Season(sampleId, sampleId, "Season 1", 2026, 1, "active", BigDecimal(1), BigDecimal(15), 13, sampleInstant, sampleInstant)
     val json = season.asJson
     assert(json.hcursor.downField("league_id").as[String].isRight)
     assert(json.hcursor.downField("season_year").as[Int].isRight)
@@ -58,7 +58,7 @@ class DomainCodecTest extends FunSuite:
   }
 
   test("Season round-trips through JSON") {
-    val season = Season(sampleId, sampleId, "Season 1", 2026, 1, "active", Json.obj(), 13, sampleInstant, sampleInstant)
+    val season = Season(sampleId, sampleId, "Season 1", 2026, 1, "active", BigDecimal(1), BigDecimal(15), 13, sampleInstant, sampleInstant)
     val decoded = decode[Season](season.asJson.noSpaces)
     assertEquals(decoded, Right(season))
   }
@@ -71,7 +71,7 @@ class DomainCodecTest extends FunSuite:
     assertEquals(cs.name, "S1")
     assertEquals(cs.seasonYear, 2026)
     assertEquals(cs.maxTeams, Some(10))
-    assertEquals(cs.rules, None)
+    assertEquals(cs.tieFloor, None)
   }
 
   test("UpdateSeason decodes partial fields") {
@@ -81,7 +81,7 @@ class DomainCodecTest extends FunSuite:
     val us = result.toOption.get
     assertEquals(us.name, Some("Updated"))
     assertEquals(us.status, Some("completed"))
-    assertEquals(us.rules, None)
+    assertEquals(us.tieFloor, None)
     assertEquals(us.maxTeams, None)
   }
 
@@ -91,7 +91,7 @@ class DomainCodecTest extends FunSuite:
 
   test("Golfer encodes with snake_case fields") {
     val golfer =
-      Golfer(sampleId, Some("12345"), "Scottie", "Scheffler", Some("USA"), Some(1), true, Json.obj(), sampleInstant)
+      Golfer(sampleId, Some("12345"), "Scottie", "Scheffler", Some("USA"), Some(1), true, sampleInstant)
     val json = golfer.asJson
     assert(json.hcursor.downField("pga_player_id").as[String].isRight)
     assert(json.hcursor.downField("first_name").as[String].isRight)
@@ -102,7 +102,7 @@ class DomainCodecTest extends FunSuite:
 
   test("Golfer round-trips through JSON") {
     val golfer =
-      Golfer(sampleId, Some("12345"), "Scottie", "Scheffler", Some("USA"), Some(1), true, Json.obj(), sampleInstant)
+      Golfer(sampleId, Some("12345"), "Scottie", "Scheffler", Some("USA"), Some(1), true, sampleInstant)
     val decoded = decode[Golfer](golfer.asJson.noSpaces)
     assertEquals(decoded, Right(golfer))
   }
@@ -135,7 +135,7 @@ class DomainCodecTest extends FunSuite:
       "completed",
       Some(20000000L),
       BigDecimal(2),
-      Json.obj(),
+      Some("Week 1"),
       sampleInstant
     )
     val json = t.asJson
@@ -161,7 +161,7 @@ class DomainCodecTest extends FunSuite:
       "completed",
       Some(20000000L),
       BigDecimal(2),
-      Json.obj(),
+      Some("Week 1"),
       sampleInstant
     )
     val decoded = decode[Tournament](t.asJson.noSpaces)
@@ -188,9 +188,8 @@ class DomainCodecTest extends FunSuite:
       Some(-10),
       Some(270),
       Some(3600000L),
-      Some(Json.arr(Json.fromInt(68), Json.fromInt(67), Json.fromInt(66), Json.fromInt(69))),
-      true,
-      Json.obj()
+      Some(68), Some(67), Some(66), Some(69),
+      true
     )
     val decoded = decode[TournamentResult](tr.asJson.noSpaces)
     assertEquals(decoded, Right(tr))
@@ -245,13 +244,13 @@ class DomainCodecTest extends FunSuite:
   // ================================================================
 
   test("Draft round-trips through JSON") {
-    val draft = Draft(sampleId, sampleId, "in_progress", "snake", Json.obj(), Some(sampleInstant), None, sampleInstant)
+    val draft = Draft(sampleId, sampleId, "in_progress", "snake", Some(sampleInstant), None, sampleInstant)
     val decoded = decode[Draft](draft.asJson.noSpaces)
     assertEquals(decoded, Right(draft))
   }
 
   test("Draft encodes with snake_case") {
-    val draft = Draft(sampleId, sampleId, "pending", "snake", Json.obj(), None, None, sampleInstant)
+    val draft = Draft(sampleId, sampleId, "pending", "snake", None, None, sampleInstant)
     val json = draft.asJson
     assert(json.hcursor.downField("season_id").as[String].isRight)
     assert(json.hcursor.downField("draft_type").as[String].isRight)
@@ -279,13 +278,8 @@ class DomainCodecTest extends FunSuite:
 
   test("FantasyScore round-trips through JSON") {
     val score = FantasyScore(
-      sampleId,
-      sampleId,
-      sampleId,
-      sampleId,
-      sampleId,
-      BigDecimal("18.50"),
-      Json.obj("position" -> Json.fromInt(1)),
+      sampleId, sampleId, sampleId, sampleId, sampleId,
+      BigDecimal("18.50"), 1, 1, BigDecimal(18), BigDecimal(100), BigDecimal("18.50"), BigDecimal(1),
       sampleInstant
     )
     val decoded = decode[FantasyScore](score.asJson.noSpaces)
@@ -293,7 +287,11 @@ class DomainCodecTest extends FunSuite:
   }
 
   test("FantasyScore encodes with snake_case") {
-    val score = FantasyScore(sampleId, sampleId, sampleId, sampleId, sampleId, BigDecimal(18), Json.obj(), sampleInstant)
+    val score = FantasyScore(
+      sampleId, sampleId, sampleId, sampleId, sampleId,
+      BigDecimal(18), 1, 1, BigDecimal(18), BigDecimal(100), BigDecimal(18), BigDecimal(1),
+      sampleInstant
+    )
     val json = score.asJson
     assert(json.hcursor.downField("season_id").as[String].isRight)
     assert(json.hcursor.downField("team_id").as[String].isRight)
@@ -321,7 +319,7 @@ class DomainCodecTest extends FunSuite:
   // ================================================================
 
   test("Golfer with null optional fields encodes nulls") {
-    val golfer = Golfer(sampleId, None, "Tiger", "Woods", None, None, true, Json.obj(), sampleInstant)
+    val golfer = Golfer(sampleId, None, "Tiger", "Woods", None, None, true, sampleInstant)
     val json = golfer.asJson
     assert(json.hcursor.downField("pga_player_id").focus.exists(_.isNull))
     assert(json.hcursor.downField("country").focus.exists(_.isNull))
@@ -340,7 +338,7 @@ class DomainCodecTest extends FunSuite:
       "upcoming",
       Some(0L),
       BigDecimal(1),
-      Json.obj(),
+      None,
       sampleInstant
     )
     val decoded = decode[Tournament](t.asJson.noSpaces)
@@ -349,13 +347,8 @@ class DomainCodecTest extends FunSuite:
 
   test("BigDecimal precision preserved in FantasyScore") {
     val score = FantasyScore(
-      sampleId,
-      sampleId,
-      sampleId,
-      sampleId,
-      sampleId,
-      BigDecimal("7.333333333"),
-      Json.obj(),
+      sampleId, sampleId, sampleId, sampleId, sampleId,
+      BigDecimal("7.333333333"), 5, 2, BigDecimal(14), BigDecimal(50), BigDecimal("7.333333333"), BigDecimal(1),
       sampleInstant
     )
     val decoded = decode[FantasyScore](score.asJson.noSpaces)

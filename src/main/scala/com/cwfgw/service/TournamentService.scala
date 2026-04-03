@@ -141,6 +141,9 @@ class TournamentService(espnImportService: EspnImportService, scoringService: Sc
               IO.pure(Left(s"Cannot finalize — incomplete tournaments: $names"))
             else
               SeasonRepository
-                .update(seasonId, UpdateSeason(name = None, status = Some("completed"), rules = None, maxTeams = None))
+                .update(seasonId, UpdateSeason(
+                  name = None, status = Some("completed"), maxTeams = None,
+                  tieFloor = None, sideBetAmount = None
+                ))
                 .transact(xa).map(_ => Right(s"Season '${season.name}' finalized (${tournaments.size} tournaments)"))
     yield result

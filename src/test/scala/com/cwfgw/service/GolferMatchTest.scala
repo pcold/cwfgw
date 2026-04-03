@@ -1,6 +1,5 @@
 package com.cwfgw.service
 
-import io.circe.Json
 import munit.FunSuite
 
 import java.time.Instant
@@ -22,7 +21,6 @@ class GolferMatchTest extends FunSuite:
     None,
     None,
     true,
-    Json.obj(),
     now
   )
 

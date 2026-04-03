@@ -1,6 +1,5 @@
 package com.cwfgw.domain
 
-import io.circe.Json
 import io.circe.derivation.ConfiguredCodec
 import java.util.UUID
 import java.time.Instant
@@ -13,7 +12,6 @@ case class Golfer(
   country: Option[String],
   worldRanking: Option[Int],
   active: Boolean,
-  metadata: Json,
   updatedAt: Instant
 ) derives ConfiguredCodec
 
@@ -31,6 +29,5 @@ case class UpdateGolfer(
   lastName: Option[String],
   country: Option[String],
   worldRanking: Option[Int],
-  active: Option[Boolean],
-  metadata: Option[Json]
+  active: Option[Boolean]
 ) derives ConfiguredCodec

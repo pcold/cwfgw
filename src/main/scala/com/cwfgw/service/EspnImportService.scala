@@ -4,9 +4,7 @@ import cats.effect.IO
 import cats.implicits.*
 import doobie.*
 import doobie.implicits.*
-import io.circe.Json
 import io.circe.derivation.ConfiguredCodec
-import io.circe.syntax.*
 import org.typelevel.log4cats.LoggerFactory
 
 import java.util.UUID
@@ -82,15 +80,16 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
       tournaments <- IO.fromEither(espnClient.parseAllLeaderboards(json).left.map(e => new RuntimeException(e)))
       dbState <- (for
         seasonOpt <- SeasonRepository.findById(seasonId)
+        rulesOpt <- SeasonRepository.getSeasonRules(seasonId)
         allGolfers <- GolferRepository.findAll(activeOnly = false, search = None)
         teams <- TeamRepository.findBySeason(seasonId)
         rosters <- TeamRepository.getRosterBySeason(seasonId)
         tournamentRecords <- tournaments.traverse(espn =>
           TournamentRepository.findIdAndMultiplier(espn.espnId)
         )
-      yield (seasonOpt, allGolfers, teams, rosters, tournamentRecords)).transact(xa)
-      (seasonOpt, allGolfers, teams, rosters, tournamentRecords) = dbState
-      rules = seasonOpt.map(_.seasonRules).getOrElse(SeasonRules.default)
+      yield (seasonOpt, rulesOpt, allGolfers, teams, rosters, tournamentRecords)).transact(xa)
+      (seasonOpt, rulesOpt, allGolfers, teams, rosters, tournamentRecords) = dbState
+      rules = rulesOpt.getOrElse(SeasonRules.default)
       golferByEspnId = allGolfers.flatMap(g => g.pgaPlayerId.map(_ -> g)).toMap
       golferByName = allGolfers.map(g => (g.firstName.toLowerCase, g.lastName.toLowerCase) -> g).toMap
       golferByLastName = allGolfers.groupBy(_.lastName.toLowerCase)
@@ -219,7 +218,7 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
                   val player = ImportedPlayer(competitor.name, competitor.position, matched = false, created = false)
                   FC.pure(acc :+ (player, None))
                 case Some((golferId, created)) =>
-                  val roundScoresJson = Json.arr(competitor.roundScores.map(s => Json.fromInt(s))*)
+                  val rounds = competitor.roundScores
                   TournamentRepository.upsertResult(
                     tournamentId,
                     CreateTournamentResult(
@@ -228,7 +227,10 @@ class EspnImportService(espnClient: EspnClient, xa: Transactor[IO])(using Logger
                       scoreToPar = competitor.scoreToPar,
                       totalStrokes = competitor.totalStrokes,
                       earnings = None,
-                      roundScores = Some(roundScoresJson),
+                      round1 = rounds.lift(0),
+                      round2 = rounds.lift(1),
+                      round3 = rounds.lift(2),
+                      round4 = rounds.lift(3),
                       madeCut = competitor.madeCut
                     )
                   ).map { _ =>

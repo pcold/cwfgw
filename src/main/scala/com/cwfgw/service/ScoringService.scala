@@ -6,8 +6,6 @@ import com.cwfgw.domain.{*, given}
 import com.cwfgw.repository.{ScoreRepository, SeasonRepository, TeamRepository, TournamentRepository}
 import doobie.*
 import doobie.implicits.*
-import io.circe.syntax.*
-
 import java.util.UUID
 
 class ScoringService(xa: Transactor[IO]):
@@ -25,6 +23,7 @@ class ScoringService(xa: Transactor[IO]):
     val action =
       for
         seasonOpt <- SeasonRepository.findById(seasonId)
+        rulesOpt <- SeasonRepository.getSeasonRules(seasonId)
         tournamentOpt <- TournamentRepository.findById(tournamentId)
         results <- TournamentRepository.findResults(tournamentId)
         teams <- TeamRepository.findBySeason(seasonId)
@@ -33,7 +32,7 @@ class ScoringService(xa: Transactor[IO]):
           case (None, _) => FC.pure(Left("Season not found"))
           case (_, None) => FC.pure(Left("Tournament not found"))
           case (Some(season), Some(tournament)) =>
-            val rules = season.seasonRules
+            val rules = rulesOpt.getOrElse(SeasonRules.default)
             val multiplier = tournament.payoutMultiplier
             val numTeams = teams.size
             val resultsByGolfer = results.map(r => r.golferId -> r).toMap
@@ -57,7 +56,7 @@ class ScoringService(xa: Transactor[IO]):
                           val ownerPayout = splits.getOrElse(team.id, basePayout)
                           val bd = ScoreBreakdown(pos, numTied, basePayout, entry.ownershipPct, ownerPayout, multiplier)
                           ScoreRepository
-                            .upsertScore(seasonId, team.id, tournamentId, entry.golferId, ownerPayout, bd.asJson)
+                            .upsertScore(seasonId, team.id, tournamentId, entry.golferId, ownerPayout, bd)
                             .map(_ => Some(GolferScoreEntry(entry.golferId, ownerPayout, bd)))
                 }
               yield (team, golferScores.flatten, roster)
@@ -85,6 +84,7 @@ class ScoringService(xa: Transactor[IO]):
     val action =
       for
         seasonOpt <- SeasonRepository.findById(seasonId)
+        rulesOpt <- SeasonRepository.getSeasonRules(seasonId)
         teams <- TeamRepository.findBySeason(seasonId)
         allRosters <- TeamRepository.getRosterBySeason(seasonId)
         result <-
@@ -93,7 +93,7 @@ class ScoringService(xa: Transactor[IO]):
             seasonOpt match
               case None => FC.pure(Left("Season not found"))
               case Some(season) =>
-                val rules = season.seasonRules
+                val rules = rulesOpt.getOrElse(SeasonRules.default)
                 val numTeams = teams.size
                 val teamMap = teams.map(t => t.id -> t.teamName).toMap
                 rules.sideBetRounds.traverse { round =>

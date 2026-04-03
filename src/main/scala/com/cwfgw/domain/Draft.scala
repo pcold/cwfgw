@@ -1,6 +1,5 @@
 package com.cwfgw.domain
 
-import io.circe.Json
 import io.circe.derivation.ConfiguredCodec
 import java.util.UUID
 import java.time.Instant
@@ -10,13 +9,12 @@ case class Draft(
   seasonId: UUID,
   status: String,
   draftType: String,
-  settings: Json,
   startedAt: Option[Instant],
   completedAt: Option[Instant],
   createdAt: Instant
 ) derives ConfiguredCodec
 
-case class CreateDraft(draftType: Option[String], settings: Option[Json]) derives ConfiguredCodec
+case class CreateDraft(draftType: Option[String]) derives ConfiguredCodec
 
 case class DraftPick(
   id: UUID,

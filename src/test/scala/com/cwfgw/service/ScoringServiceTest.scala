@@ -1,6 +1,5 @@
 package com.cwfgw.service
 
-import io.circe.Json
 import munit.FunSuite
 
 import java.time.Instant
@@ -27,9 +26,8 @@ class ScoringServiceTest extends FunSuite:
     Some(-5),
     Some(270),
     None,
-    None,
-    position.isDefined,
-    Json.obj()
+    None, None, None, None,
+    position.isDefined
   )
 
   // ================================================================

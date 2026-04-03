@@ -4,9 +4,7 @@ import cats.effect.IO
 import cats.implicits.*
 import doobie.*
 import doobie.implicits.*
-import io.circe.Json
 import io.circe.derivation.ConfiguredCodec
-import io.circe.syntax.*
 import org.typelevel.log4cats.LoggerFactory
 
 import java.text.Normalizer
@@ -44,12 +42,6 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
 
       // Persist tournaments
       created <- matchResults.traverse: (parsed, espnMatch) =>
-        val metadata = Json.obj(
-          "week" -> parsed.week.asJson,
-          "event" -> parsed.eventNumber.asJson,
-          "signature" -> parsed.isSignature.asJson,
-          "notes" -> parsed.notes.asJson
-        )
         val req = CreateTournament(
           pgaTournamentId = espnMatch.map(_.id),
           name = parsed.name,
@@ -59,7 +51,7 @@ class AdminService(espnClient: EspnClient, xa: Transactor[IO])(using LoggerFacto
           courseName = None,
           purseAmount = None,
           payoutMultiplier = Some(parsed.payoutMultiplier),
-          metadata = Some(metadata)
+          week = Some(parsed.week)
         )
         TournamentRepository.create(req).transact(xa).map: tournament =>
           TournamentCreated(

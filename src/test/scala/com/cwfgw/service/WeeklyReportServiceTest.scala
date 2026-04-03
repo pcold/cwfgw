@@ -1223,7 +1223,7 @@ class WeeklyReportServiceTest extends FunSuite:
       status = status,
       purseAmount = None,
       payoutMultiplier = BigDecimal(1),
-      metadata = Json.obj(),
+      week = None,
       createdAt = Instant.now()
     )
 

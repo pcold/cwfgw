@@ -3,14 +3,12 @@ package com.cwfgw.repository
 import doobie.*
 import doobie.implicits.*
 import doobie.postgres.implicits.*
-import doobie.postgres.circe.jsonb.implicits.*
-import io.circe.Json
 import java.util.UUID
 import com.cwfgw.domain.*
 
 object DraftRepository:
 
-  private val selectDraftCols = fr"id, season_id, status, draft_type, settings, started_at, completed_at, created_at"
+  private val selectDraftCols = fr"id, season_id, status, draft_type, started_at, completed_at, created_at"
 
   private val selectPickCols = fr"id, draft_id, team_id, golfer_id, round_num, pick_num, picked_at"
 
@@ -18,8 +16,8 @@ object DraftRepository:
     (fr"SELECT" ++ selectDraftCols ++ fr"FROM drafts WHERE season_id = $seasonId").query[Draft].option
 
   def create(seasonId: UUID, req: CreateDraft): ConnectionIO[Draft] =
-    sql"""INSERT INTO drafts (season_id, draft_type, settings)
-          VALUES ($seasonId, ${req.draftType.getOrElse("snake")}, ${req.settings.getOrElse(Json.obj())})
+    sql"""INSERT INTO drafts (season_id, draft_type)
+          VALUES ($seasonId, ${req.draftType.getOrElse("snake")})
           RETURNING $selectDraftCols""".query[Draft].unique
 
   def updateStatus(draftId: UUID, status: String): ConnectionIO[Option[Draft]] =
@@ -44,7 +42,7 @@ object DraftRepository:
       selectPickCols).query[DraftPick].option
 
   def getAvailableGolfers(draftId: UUID): ConnectionIO[List[Golfer]] =
-    sql"""SELECT g.id, g.pga_player_id, g.first_name, g.last_name, g.country, g.world_ranking, g.active, g.metadata, g.updated_at
+    sql"""SELECT g.id, g.pga_player_id, g.first_name, g.last_name, g.country, g.world_ranking, g.active, g.updated_at
           FROM golfers g
           WHERE g.active = true
             AND g.id NOT IN (SELECT dp.golfer_id FROM draft_picks dp WHERE dp.draft_id = $draftId AND dp.golfer_id IS NOT NULL)

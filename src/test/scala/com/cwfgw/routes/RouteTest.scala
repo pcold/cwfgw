@@ -27,7 +27,7 @@ class RouteTest extends FunSuite:
   private val sampleInstant = Instant.parse("2026-01-15T12:00:00Z")
   private val sampleLeague = League(sampleId, "Test League", sampleInstant)
   private val sampleSeason =
-    Season(sampleId, sampleId, "Season 1", 2026, 1, "active", Json.obj(), 13, sampleInstant, sampleInstant)
+    Season(sampleId, sampleId, "Season 1", 2026, 1, "active", BigDecimal(1), BigDecimal(15), 13, sampleInstant, sampleInstant)
   private val sampleTeam = Team(sampleId, sampleId, "Alice", "Team A", Some(1), sampleInstant, sampleInstant)
 
   // ================================================================
@@ -239,7 +239,7 @@ class RouteTest extends FunSuite:
   private val draftService = new DraftService(null):
     override def get(seasonId: UUID): IO[Option[Draft]] =
       if seasonId == sampleId then
-        IO.pure(Some(Draft(sampleId, sampleId, "pending", "snake", Json.obj(), None, None, sampleInstant)))
+        IO.pure(Some(Draft(sampleId, sampleId, "pending", "snake", None, None, sampleInstant)))
       else IO.pure(None)
     override def start(seasonId: UUID): IO[Either[String, Draft]] = IO.pure(Left("Draft is already in_progress"))
     override def getPicks(seasonId: UUID): IO[Either[String, List[DraftPick]]] =
@@ -381,7 +381,7 @@ class RouteTest extends FunSuite:
     "completed",
     Some(20000000L),
     BigDecimal(2),
-    Json.obj(),
+    None,
     sampleInstant
   )
 
